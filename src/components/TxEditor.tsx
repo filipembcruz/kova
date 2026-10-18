@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { PiBackspaceBold, PiCheckBold, PiTrashBold, PiCalendarBlankBold, PiHashBold, PiArrowDownBold, PiPlusBold, PiPaperclipBold, PiFilePdfDuotone, PiXBold, PiShareNetworkBold, PiBellRingingBold } from 'react-icons/pi';
+import { PiBackspaceBold, PiCheckBold, PiTrashBold, PiCalendarBlankBold, PiHashBold, PiArrowDownBold, PiPlusBold, PiPaperclipBold, PiFilePdfDuotone, PiXBold, PiShareNetworkBold, PiBellRingingBold, PiLightningBold } from 'react-icons/pi';
 import type { Attachment, Kind, Repeat, Tx, Transfer } from '../lib/types';
 import { getState, setState, useStore } from '../lib/store';
 import { accountsSorted, addDays, evalExpr, today, toBase, uid, rate, parseIso } from '../lib/calc';
@@ -9,12 +9,13 @@ import { openOverlay, toast } from '../lib/nav';
 import { money } from '../lib/format';
 import { tap, pickFile, openBlob, shareBlob, notificationsAllowed } from '../native';
 import { pickDate } from './Pickers';
+import { addShortcut } from './Shortcuts';
 import { putFile, getFile, deleteFile, compressImage } from '../lib/files';
 import { fold } from '../lib/calc';
 
 type Mode = Kind | 'transfer';
 
-export function openTxEditor(opts: { tx?: Tx; transfer?: Transfer; kind?: Mode; accountId?: string; categoryId?: string; repeat?: Repeat; date?: string } = {}) {
+export function openTxEditor(opts: { tx?: Tx; transfer?: Transfer; kind?: Mode; accountId?: string; categoryId?: string; repeat?: Repeat; date?: string; amount?: number; note?: string } = {}) {
   openOverlay((close) => <TxEditor {...opts} close={close} />);
 }
 
@@ -57,21 +58,21 @@ function ImageViewer({ att, blob, url }: { att: Attachment; blob: Blob; url: str
   );
 }
 
-function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: date0, close }: { tx?: Tx; transfer?: Transfer; kind?: Mode; accountId?: string; categoryId?: string; repeat?: Repeat; date?: string; close: () => void }) {
+function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: date0, amount: amount0, note: note0, close }: { tx?: Tx; transfer?: Transfer; kind?: Mode; accountId?: string; categoryId?: string; repeat?: Repeat; date?: string; amount?: number; note?: string; close: () => void }) {
   const s = useStore();
   const { t, locale } = useT();
   const accounts = accountsSorted(s.accounts).filter((a) => !a.archived || a.id === tx?.accountId || a.id === transfer?.from || a.id === transfer?.to);
   const defaultAcc = accountId ?? accounts[0]?.id ?? '';
 
   const [mode, setMode] = useState<Mode>(transfer ? 'transfer' : tx?.kind ?? kind ?? 'expense');
-  const [expr, setExpr] = useState(tx ? fmtExpr(tx.amount) : transfer ? fmtExpr(transfer.fromAmount) : '');
+  const [expr, setExpr] = useState(tx ? fmtExpr(tx.amount) : transfer ? fmtExpr(transfer.fromAmount) : amount0 ? fmtExpr(amount0) : '');
   const [acc, setAcc] = useState(tx?.accountId ?? transfer?.from ?? defaultAcc);
   const [toAcc, setToAcc] = useState(transfer?.to ?? accounts.find((a) => a.id !== defaultAcc)?.id ?? '');
   const [toExpr, setToExpr] = useState(transfer && transfer.toAmount !== transfer.fromAmount ? fmtExpr(transfer.toAmount) : '');
   const [cat, setCat] = useState(tx?.categoryId ?? categoryId ?? '');
   const [date, setDate] = useState(tx?.date ?? transfer?.date ?? date0 ?? today());
   const [done, setDone] = useState(!!tx?.done);
-  const [note, setNote] = useState(tx?.note ?? transfer?.note ?? '');
+  const [note, setNote] = useState(tx?.note ?? transfer?.note ?? note0 ?? '');
   const [tags, setTags] = useState<string[]>(tx?.tags ?? []);
   const [rep, setRep] = useState<Repeat | ''>(tx?.repeat ?? repeat ?? '');
   const [remind, setRemind] = useState<number>(tx?.remind ?? (repeat ? 1 : -1));
@@ -217,6 +218,13 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
     close();
   };
 
+  const saveShortcut = () => {
+    if (mode === 'transfer') return;
+    if (!cat) return toast(t('chooseCategory'));
+    addShortcut({ kind: mode, categoryId: cat, accountId: acc, amount: cents > 0 ? cents : undefined, note: note.trim() });
+    toast(t('shortcutSaved'));
+  };
+
   const addTag = (g: string) => {
     const v = g.trim().replace(/^#/, '');
     if (v && !tags.includes(v)) setTags([...tags, v]);
@@ -239,9 +247,12 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
     <Sheet
       full
       title={tx || transfer ? t('editTransaction') : t('newTransaction')}
-      actions={(tx || transfer) && (
-        <button className="icon-btn" style={{ color: 'var(--exp)' }} onClick={remove} aria-label="delete"><PiTrashBold /></button>
-      )}
+      actions={<>
+        {mode !== 'transfer' && (
+          <button className="icon-btn" onClick={saveShortcut} aria-label={t('newShortcut')} title={t('newShortcut')}><PiLightningBold /></button>
+        )}
+        {(tx || transfer) && <button className="icon-btn" style={{ color: 'var(--exp)' }} onClick={remove} aria-label="delete"><PiTrashBold /></button>}
+      </>}
     >
       <div className="sheet-b" style={{ paddingBottom: 12 }} onFocusCapture={(e) => { if ((e.target as HTMLElement).tagName === 'INPUT') setPad(false); }}>
         <Seg<Mode>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { PiUserDuotone, PiTranslateDuotone, PiPaletteDuotone, PiCurrencyCircleDollarDuotone, PiArrowsClockwiseBold, PiEyeSlashDuotone, PiCalendarDuotone, PiDownloadSimpleDuotone, PiUploadSimpleDuotone, PiFileCsvDuotone, PiTrashDuotone, PiHeartDuotone, PiCaretRightBold, PiTagDuotone, PiSwapDuotone, PiCloudCheckDuotone, PiHashDuotone, PiReceiptDuotone, PiGoogleDriveLogoDuotone, PiClockCounterClockwiseDuotone, PiVibrateDuotone, PiChatTextDuotone, PiMagnifyingGlassBold, PiEnvelopeSimpleDuotone } from 'react-icons/pi';
+import { PiUserDuotone, PiTranslateDuotone, PiPaletteDuotone, PiCurrencyCircleDollarDuotone, PiArrowsClockwiseBold, PiEyeSlashDuotone, PiCalendarDuotone, PiDownloadSimpleDuotone, PiUploadSimpleDuotone, PiFileCsvDuotone, PiTrashDuotone, PiHeartDuotone, PiCaretRightBold, PiTagDuotone, PiSwapDuotone, PiCloudCheckDuotone, PiHashDuotone, PiReceiptDuotone, PiGoogleDriveLogoDuotone, PiClockCounterClockwiseDuotone, PiVibrateDuotone, PiChatTextDuotone, PiMagnifyingGlassBold, PiEnvelopeSimpleDuotone, PiLockKeyDuotone, PiFingerprintDuotone, PiLightningDuotone } from 'react-icons/pi';
 import type { State } from '../lib/types';
 import { getState, replaceState, setState, useStore, backupNow } from '../lib/store';
 import { useT } from '../i18n';
@@ -9,6 +9,9 @@ import { navigate, openOverlay, toast, closeAllOverlays } from '../lib/nav';
 import { importMmBackup } from '../lib/importer';
 import { pickFile, saveTextFile, listAutoBackups, readAutoBackup, type BackupEntry } from '../native';
 import { today, fold } from '../lib/calc';
+import { PinSheet, setPin } from '../components/Lock';
+import { ShortcutsSheet } from '../components/Shortcuts';
+import { biometricAvailable } from '../native';
 
 declare const __APP_VERSION__: string;
 function Ico({ children }: { c?: string; children: React.ReactNode }) {
@@ -105,6 +108,12 @@ export function Settings() {
   const set = (patch: Partial<State['settings']>) => setState((x) => ({ ...x, settings: { ...x.settings, ...patch } }));
   const used = [...new Set(s.accounts.map((a) => a.currency).filter((c) => c !== st.baseCurrency))];
   const [busy, setBusy] = useState(false);
+  const [bioOk, setBioOk] = useState(false);
+  useEffect(() => { biometricAvailable().then(setBioOk); }, []);
+  const toggleLock = (on: boolean) => {
+    if (on) openOverlay((close) => <PinSheet mode="create" close={close} />);
+    else openOverlay((close) => <PinSheet mode="verify" close={close} onOk={() => { setPin(null); toast(t('pinOff')); }} />);
+  };
 
   const changeBase = (next: string) => {
     if (next === st.baseCurrency) return;
@@ -179,6 +188,18 @@ export function Settings() {
           <Switch on={st.hideBalance} onChange={(v) => set({ hideBalance: v })} />
         </div>
         <div className="setting">
+          <Ico><PiLockKeyDuotone /></Ico>
+          <div className="grow"><div className="t">{t('appLock')}</div><div className="s">{t('appLockD')}</div></div>
+          <Switch on={!!st.pinHash} onChange={toggleLock} />
+        </div>
+        {st.pinHash && bioOk && (
+          <div className="setting">
+            <Ico><PiFingerprintDuotone /></Ico>
+            <div className="grow"><div className="t">{t('useBiometric')}</div></div>
+            <Switch on={!!st.biometric} onChange={(v) => set({ biometric: v })} />
+          </div>
+        )}
+        <div className="setting">
           <Ico><PiVibrateDuotone /></Ico>
           <div className="grow"><div className="t">{t('haptics')}</div><div className="s">{t('hapticsD')}</div></div>
           <Switch on={st.haptics !== false} onChange={(v) => set({ haptics: v })} />
@@ -234,6 +255,11 @@ export function Settings() {
         <button className="setting" onClick={() => openOverlay(() => <TagsSheet />)}>
           <Ico><PiHashDuotone /></Ico>
           <div className="grow"><div className="t">{t('manageTags')}</div></div>
+          <PiCaretRightBold className="muted" />
+        </button>
+        <button className="setting" onClick={() => openOverlay(() => <ShortcutsSheet />)}>
+          <Ico><PiLightningDuotone /></Ico>
+          <div className="grow"><div className="t">{t('shortcuts')}</div><div className="s">{t('shortcutsD')}</div></div>
           <PiCaretRightBold className="muted" />
         </button>
         <button className="setting" onClick={() => openOverlay(() => <NotesSheet />)}>

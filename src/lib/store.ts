@@ -74,30 +74,68 @@ export async function maintenance() {
     emit();
     persist();
   }
-  const day = today();
-  if (state.settings.onboarded && state.settings.autoBackup && (state.settings.lastBackup ?? '').slice(0, 10) !== day) {
+  // safety net: a month without any backup yet (e.g. first start after the update)
+  if (state.settings.onboarded && state.settings.autoBackup && (state.settings.lastBackup ?? '').slice(0, 7) !== today().slice(0, 7)) {
     await backupNow();
   }
 }
 
-export async function backupNow() {
-  try {
-    const { buildBackup } = await import('./backup');
-    const json = await buildBackup(state);
-    await writeAutoBackup(json, today());
-    await writePublicBackup(json);
-    state = { ...state, settings: { ...state.settings, lastBackup: new Date().toISOString() } };
-    emit();
-    persist();
-    return true;
-  } catch {
-    return false;
-  }
+// ---------- automatic backup ----------
+// Every change schedules a backup a few seconds later (and right away when the app goes to the
+// background). There is one file per month, overwritten each time: no pile of copies.
+let backupTimer: ReturnType<typeof setTimeout> | undefined;
+let dirty = false;
+let running: Promise<boolean> | null = null;
+
+function scheduleBackup() {
+  if (!state.settings.onboarded || !state.settings.autoBackup) return;
+  dirty = true;
+  clearTimeout(backupTimer);
+  backupTimer = setTimeout(() => { flushBackup(); }, 5000);
+}
+
+export async function flushBackup() {
+  clearTimeout(backupTimer);
+  if (!dirty) return true;
+  return backupNow();
+}
+
+const hasData = (s: State) => s.txs.length > 0 || s.transfers.length > 0;
+
+export async function backupNow(): Promise<boolean> {
+  if (running) await running.catch(() => {});
+  dirty = false;
+  running = (async () => {
+    try {
+      if (!hasData(state)) return true; // never overwrite a good backup with an empty app
+      const { buildBackup } = await import('./backup');
+      const json = await buildBackup(state);
+      const prev = state.settings.lastBackupTxs ?? 0;
+      // a sudden big drop in transactions keeps the previous copy aside, just in case
+      const shrink = prev > 20 && state.txs.length < prev * 0.5;
+      const ok = await writeAutoBackup(json, today(), shrink);
+      await writePublicBackup(json, today());
+      if (ok) {
+        state = { ...state, settings: { ...state.settings, lastBackup: new Date().toISOString(), lastBackupTxs: state.txs.length } };
+        emit();
+        saveSoon();
+      }
+      return ok;
+    } catch {
+      dirty = true;
+      return false;
+    }
+  })();
+  const r = await running;
+  running = null;
+  return r;
 }
 
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && loaded) maintenance();
+    if (!loaded) return;
+    if (document.visibilityState === 'visible') maintenance();
+    else flushBackup();
   });
 }
 
@@ -112,6 +150,11 @@ function migrate(s: State): State {
 
 function persist() {
   syncReminders(state);
+  scheduleBackup();
+  saveSoon();
+}
+
+function saveSoon() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     idbSet(KEY, state).catch(() => {

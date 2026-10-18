@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { PiHouse, PiHouseFill, PiWallet, PiWalletFill, PiChartPieSlice, PiChartPieSliceFill, PiSquaresFour, PiSquaresFourFill, PiGearSix, PiGearSixFill, PiPlusBold, PiDownloadSimpleBold, PiSparkleBold, PiCloudArrowDownBold } from 'react-icons/pi';
-import { isLoaded, loadState, setState, useStore } from './lib/store';
+import { PiHouse, PiHouseFill, PiWallet, PiWalletFill, PiChartPieSlice, PiChartPieSliceFill, PiSquaresFour, PiSquaresFourFill, PiGearSix, PiGearSixFill, PiPlusBold, PiDownloadSimpleBold, PiSparkleBold, PiCloudArrowDownBold, PiClockCounterClockwiseBold } from 'react-icons/pi';
+import { isLoaded, loadState, setState, useStore, getState } from './lib/store';
 import { useT, resolveLang } from './i18n';
 import { goTab, useRoute, useOverlays } from './lib/nav';
 import { OverlayHost, Toast } from './components/ui';
@@ -12,7 +12,9 @@ import { Categories } from './screens/Categories';
 import { Settings, runMmImport, updateRates, restoreFromFile } from './screens/Settings';
 import { Transactions } from './screens/Transactions';
 import { Bills } from './screens/Bills';
-import { setStatusBar, setHaptics, takeCrashNote } from './native';
+import { setStatusBar, setHaptics, takeCrashNote, listAutoBackups, readAutoBackup, type BackupEntry } from './native';
+import { LockScreen } from './components/Lock';
+import { applyBackupText, restoreError } from './screens/Settings';
 import { openOverlay, toast } from './lib/nav';
 import { Sheet } from './components/ui';
 
@@ -66,11 +68,22 @@ function Shell({ dark }: { dark: boolean }) {
     const last = s.settings.ratesUpdated ? new Date(s.settings.ratesUpdated).getTime() : 0;
     if (s.settings.onboarded && Date.now() - last > 12 * 3600e3 && s.accounts.some((a) => a.currency !== s.settings.baseCurrency)) updateRates();
   }, []);
+  const [locked, setLocked] = useState(() => !!s.settings.pinHash);
+  useEffect(() => {
+    let hiddenAt = 0;
+    const fn = () => {
+      if (document.visibilityState === 'hidden') hiddenAt = Date.now();
+      else if (getState().settings.pinHash && hiddenAt && Date.now() - hiddenAt > 30_000) setLocked(true);
+    };
+    document.addEventListener('visibilitychange', fn);
+    return () => document.removeEventListener('visibilitychange', fn);
+  }, []);
   return (
     <>
       {s.settings.onboarded ? <Main /> : <Welcome />}
       <OverlayHost />
       <Toast />
+      {locked && s.settings.pinHash && <LockScreen onUnlock={() => setLocked(false)} />}
     </>
   );
 }
@@ -125,7 +138,16 @@ function Main() {
 }
 
 function Welcome() {
-  const { t } = useT();
+  const { t, locale } = useT();
+  const [found, setFound] = useState<BackupEntry | null | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { listAutoBackups().then((l) => setFound(l[0] ?? null)).catch(() => setFound(null)); }, []);
+  const restoreFound = async () => {
+    if (!found) return;
+    setBusy(true);
+    try { await applyBackupText(t, (await readAutoBackup(found)) ?? ''); } catch (e) { restoreError(t, e); }
+    setBusy(false);
+  };
   return (
     <div className="welcome">
       <div className="art">
@@ -145,7 +167,15 @@ function Welcome() {
       <img className="logo" src="logo.svg" alt="Kova" />
       <h1>{t('welcomeTitle')}</h1>
       <p>{t('welcomeText')}</p>
-      <button className="btn light" onClick={() => setState((s) => ({ ...s, settings: { ...s.settings, onboarded: true } }))}>
+      {found && (
+        <div className="found glass">
+          <b><PiClockCounterClockwiseBold /> {t('backupFound')}</b>
+          <span>{t('backupFoundD')}</span>
+          <span className="when">{found.mtime ? new Date(found.mtime).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' }) : found.name}{found.size ? ` · ${(found.size / 1048576).toFixed(1)} MB` : ''}</span>
+          <button className="btn light" disabled={busy} onClick={restoreFound}><PiCloudArrowDownBold /> {t('restoreNow')}</button>
+        </div>
+      )}
+      <button className={'btn ' + (found ? 'ghost' : 'light')} onClick={() => setState((s) => ({ ...s, settings: { ...s.settings, onboarded: true } }))}>
         <PiSparkleBold /> {t('startFresh')}
       </button>
       <button className="btn ghost" onClick={() => restoreFromFile(t, false)}>
@@ -154,7 +184,7 @@ function Welcome() {
       <button className="btn ghost" onClick={() => runMmImport(t)}>
         <PiDownloadSimpleBold /> {t('importOther')}
       </button>
-      <div style={{ fontSize: 12.5, opacity: 0.7, marginTop: 12, textAlign: 'center' }}>{t('restoreHint')}</div>
+      <div style={{ fontSize: 12.5, opacity: 0.7, marginTop: 12, textAlign: 'center' }}>{found === null ? t('noBackupFound') : t('restoreHint')}</div>
     </div>
   );
 }

@@ -4,7 +4,11 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
+import androidx.biometric.BiometricManager;
+import androidx.biometric.BiometricPrompt;
+import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
+import androidx.fragment.app.FragmentActivity;
 import java.io.File;
 import android.view.View;
 import android.view.Window;
@@ -88,5 +92,36 @@ public class SystemColorPlugin extends Plugin {
         } catch (Exception e) {
             call.reject(String.valueOf(e.getMessage()));
         }
+    }
+
+    private static final int BIO = BiometricManager.Authenticators.BIOMETRIC_WEAK;
+
+    @PluginMethod
+    public void biometricAvailable(PluginCall call) {
+        JSObject o = new JSObject();
+        o.put("available", BiometricManager.from(getContext()).canAuthenticate(BIO) == BiometricManager.BIOMETRIC_SUCCESS);
+        call.resolve(o);
+    }
+
+    @PluginMethod
+    public void authenticate(PluginCall call) {
+        final String title = call.getString("title", "Kova");
+        final String cancel = call.getString("cancel", "PIN");
+        getActivity().runOnUiThread(() -> {
+            try {
+                BiometricPrompt prompt = new BiometricPrompt((FragmentActivity) getActivity(), ContextCompat.getMainExecutor(getContext()),
+                    new BiometricPrompt.AuthenticationCallback() {
+                        @Override
+                        public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) { call.resolve(); }
+                        @Override
+                        public void onAuthenticationError(int code, CharSequence msg) { call.reject(String.valueOf(msg), String.valueOf(code)); }
+                    });
+                BiometricPrompt.PromptInfo info = new BiometricPrompt.PromptInfo.Builder()
+                    .setTitle(title).setNegativeButtonText(cancel).setAllowedAuthenticators(BIO).build();
+                prompt.authenticate(info);
+            } catch (Exception e) {
+                call.reject(String.valueOf(e.getMessage()));
+            }
+        });
     }
 }

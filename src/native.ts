@@ -99,6 +99,8 @@ type Insets = { top?: number; bottom?: number; ime?: number };
 const SystemColor = registerPlugin<{
   set(o: { color: string; dark: boolean; navDark?: boolean }): Promise<void>;
   openFile(o: { path: string; mime: string }): Promise<void>;
+  biometricAvailable(): Promise<{ available: boolean }>;
+  authenticate(o: { title: string; cancel: string }): Promise<void>;
   getInsets(): Promise<Insets>;
   addListener(ev: 'insets', cb: (i: Insets) => void): Promise<{ remove: () => void }>;
 }>('SystemColor');
@@ -143,20 +145,29 @@ export function tap() {
 // Snapshots go to the app's private files dir, which Android's own backup
 // (Google Drive) includes, so they survive a phone change / reinstall.
 const BK_DIR = 'backups';
-const KEEP = 10;
+const KEEP = 12; // months
 
-export async function writeAutoBackup(json: string, day: string): Promise<boolean> {
+export async function writeAutoBackup(json: string, day: string, keepPrevious = false): Promise<boolean> {
   if (!isNative()) {
     try { localStorage.setItem('kova-autobackup', json); } catch { /* ignore */ }
     return true;
   }
-  await writeTextChunked(`${BK_DIR}/kova-${day}.json`, Directory.Data, json);
+  const month = day.slice(0, 7);
+  const path = `${BK_DIR}/kova-${month}.json`;
+  if (keepPrevious) {
+    try { await Filesystem.copy({ from: path, to: `${BK_DIR}/kova-${day}-safety.json`, directory: Directory.Data, toDirectory: Directory.Data }); } catch { /* none yet */ }
+  }
+  await writeTextChunked(path, Directory.Data, json);
   try {
     const list = await Filesystem.readdir({ path: BK_DIR, directory: Directory.Data });
-    const names = list.files.map((f: any) => (typeof f === 'string' ? f : f.name)).filter((n: string) => n.startsWith('kova-') && n.endsWith('.json')).sort();
-    for (const old of names.slice(0, Math.max(0, names.length - KEEP))) {
-      await Filesystem.deleteFile({ path: `${BK_DIR}/${old}`, directory: Directory.Data });
-    }
+    const names = list.files.map((f: any) => (typeof f === 'string' ? f : f.name)) as string[];
+    // older daily copies from previous versions: the monthly file replaces them
+    const daily = names.filter((n) => /^kova-\d{4}-\d{2}-\d{2}\.json$/.test(n));
+    const monthly = names.filter((n) => /^kova-\d{4}-\d{2}\.json$/.test(n)).sort();
+    const safety = names.filter((n) => n.endsWith('-safety.json')).sort();
+    const drop = [...daily, ...monthly.slice(0, Math.max(0, monthly.length - KEEP)), ...safety.slice(0, Math.max(0, safety.length - 3))];
+    for (const n of drop) await Filesystem.deleteFile({ path: `${BK_DIR}/${n}`, directory: Directory.Data });
+    for (const n of names.filter((x) => x.endsWith('.part'))) await Filesystem.deleteFile({ path: `${BK_DIR}/${n}`, directory: Directory.Data }).catch(() => {});
   } catch { /* ignore */ }
   return true;
 }
@@ -269,10 +280,11 @@ export async function takeCrashNote(): Promise<string | null> {
 }
 
 // ---------- backups that survive uninstall (public Documents/Kova) ----------
-export async function writePublicBackup(json: string) {
+export async function writePublicBackup(json: string, day: string) {
   if (!isNative()) return false;
-  // A file left by a previous install can't be overwritten on Android 11+, so fall back to a dated name.
-  for (const name of ['Kova/kova-backup.json', `Kova/kova-backup-${new Date().toISOString().slice(0, 10)}.json`]) {
+  const month = day.slice(0, 7);
+  // A file left by a previous install can't be overwritten on Android 11+, so fall back to a second name.
+  for (const name of [`Kova/kova-${month}.json`, `Kova/kova-${month}-b.json`, `Kova/kova-${day}.json`]) {
     try {
       await writeTextChunked(name, Directory.Documents, json);
       return true;
@@ -306,4 +318,14 @@ export async function scheduleReminders(list: Reminder[]) {
       notifications: list.slice(0, 60).map((r) => ({ id: r.id, title: r.title, body: r.body, schedule: { at: r.at, allowWhileIdle: true } })),
     });
   } catch { /* ignore */ }
+}
+
+// ---------- fingerprint (native plugin in android-src/) ----------
+export async function biometricAvailable() {
+  if (!isNative()) return false;
+  try { return (await SystemColor.biometricAvailable()).available; } catch { return false; }
+}
+export async function biometricAuth(title: string, cancel: string) {
+  if (!isNative()) return false;
+  try { await SystemColor.authenticate({ title, cancel }); return true; } catch { return false; }
 }

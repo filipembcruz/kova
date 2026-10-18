@@ -71,7 +71,7 @@ export function initialState(lang: 'en' | 'pt'): State {
     { id: 'wallet', name: lang === 'pt' ? 'Carteira' : 'Wallet', icon: 'wallet', color: '#7C5CFF', currency: s.baseCurrency, initial: 0, includeInTotal: true, archived: false, order: 0 },
     { id: 'bank', name: lang === 'pt' ? 'Conta bancária' : 'Bank account', icon: 'bank', color: '#3D8BFF', currency: s.baseCurrency, initial: 0, includeInTotal: true, archived: false, order: 1 },
   ];
-  return { version: 1, accounts, categories, txs: [], transfers: [], settings: s };
+  return { version: 1, accounts, categories, txs: [], transfers: [], shortcuts: [], settings: s };
 }
 
 export const CURRENCIES = ['BRL', 'EUR', 'USD', 'GBP', 'CHF', 'CAD', 'AUD', 'JPY', 'MXN', 'ARS', 'CLP', 'COP', 'AOA', 'MZN', 'INR', 'CNY', 'BTC'];

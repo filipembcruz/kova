@@ -43,7 +43,7 @@ const en = {
   planned: 'Planned', upcoming: 'Upcoming', confirmNow: 'Confirm today', confirmed: 'Confirmed', plannedHint: 'Counts in the balance on its date',
   repeat: 'Repeat', noRepeat: 'Does not repeat', weekly: 'Every week', monthly: 'Every month', yearly: 'Every year',
   sortDate: 'By date', sortValue: 'By amount', filters: 'Filters', allTime: 'All time', results: 'Results', clear: 'Clear',
-  autoBackup: 'Automatic backup', autoBackupD: 'Daily copy on the phone and in Documents/Kova (survives reinstalling). Android also includes it in your Google backup if that is on in the phone settings — no extra permission needed.',
+  autoBackup: 'Automatic backup', autoBackupD: 'Saved by itself a few seconds after every change: one file per month (last 12 kept), overwritten, on the phone and in Documents/Kova (survives reinstalling). If Google backup is on in the phone settings, Android also copies it to your Google account.',
   lastBackup: 'Last backup', backupNow: 'Back up now', backupDone: 'Backup saved', saveToDrive: 'Save to Google Drive', saveToDriveD: 'Opens the share menu: choose Drive and the folder',
   restoreAuto: 'Restore automatic backup', noBackups: 'No automatic backups yet', selectAccount: 'Select account', ofTotal: 'of total',
   nCategories: '{n} categories', searchAll: 'Searching all periods',
@@ -85,6 +85,13 @@ const en = {
   emailBody: 'Kova backup from {d}. To restore: Kova → Settings → Restore backup and pick this file.',
   restoredN: 'Restored: {t} transactions · {a} accounts', errEmpty: 'The file is empty', errBroken: 'The file is incomplete or damaged', errNotKova: 'This is not a Kova backup (for the other app use "Import from another app")',
   inApp: 'In the app', inDocs: 'Documents/Kova (survives reinstall)',
+  shortcuts: 'Shortcuts', shortcutsD: 'Launch frequent expenses with one tap', newShortcut: 'Save as shortcut', shortcutSaved: 'Shortcut saved', noShortcuts: 'No shortcuts yet',
+  suggested: 'Suggestions from your history', timesUsed: '{n}× in 6 months', editShortcuts: 'Edit', anyAmount: 'amount on launch', createShortcuts: 'Create shortcuts',
+  appLock: 'Password to open', appLockD: 'Asks for a PIN when opening Kova', useBiometric: 'Unlock with fingerprint', enterPin: 'Enter your PIN', newPin: 'Choose a 4–6 digit PIN',
+  confirmPin: 'Type the PIN again', pinMismatch: 'The PINs do not match', wrongPin: 'Wrong PIN', pinSet: 'PIN set', pinOff: 'Password removed', currentPin: 'Enter the current PIN',
+  forgotPin: 'Forgot the PIN? Reinstall Kova and restore the automatic backup.', unlock: 'Unlock', usePin: 'Use PIN',
+  backupFound: 'Backup found', backupFoundD: 'Kova found a copy of your data. Restore it now?', restoreNow: 'Restore', checkingBackups: 'Looking for backups…',
+  noBackupFound: 'If you had Kova before, pick the file in Documents/Kova or in Google Drive.',
 };
 
 type Dict = typeof en;
@@ -131,7 +138,7 @@ const pt: Dict = {
   planned: 'Previsto', upcoming: 'Próximos lançamentos', confirmNow: 'Confirmar hoje', confirmed: 'Confirmado', plannedHint: 'Entra no saldo na data',
   repeat: 'Repetir', noRepeat: 'Não repete', weekly: 'Toda semana', monthly: 'Todo mês', yearly: 'Todo ano',
   sortDate: 'Por data', sortValue: 'Por valor', filters: 'Filtros', allTime: 'Todo o período', results: 'Resultados', clear: 'Limpar',
-  autoBackup: 'Backup automático', autoBackupD: 'Cópia diária no celular e em Documentos/Kova (sobrevive à reinstalação). O Android também a inclui no backup do Google, se estiver ativo nas configurações do celular — sem permissão extra.',
+  autoBackup: 'Backup automático', autoBackupD: 'Salvo sozinho alguns segundos após cada alteração: um arquivo por mês (guarda os últimos 12), sobrescrito, no celular e em Documentos/Kova (sobrevive à reinstalação). Se o backup do Google estiver ativo no celular, o Android também copia para sua conta Google.',
   lastBackup: 'Último backup', backupNow: 'Fazer backup agora', backupDone: 'Backup salvo', saveToDrive: 'Salvar no Google Drive', saveToDriveD: 'Abre o menu de compartilhar: escolha o Drive e a pasta',
   restoreAuto: 'Restaurar backup automático', noBackups: 'Ainda não há backups automáticos', selectAccount: 'Selecionar conta', ofTotal: 'do total',
   nCategories: '{n} categorias', searchAll: 'Buscando em todo o período',
@@ -173,6 +180,13 @@ const pt: Dict = {
   emailBody: 'Backup do Kova de {d}. Para restaurar: Kova → Ajustes → Restaurar backup e escolha este arquivo.',
   restoredN: 'Restaurado: {t} transações · {a} contas', errEmpty: 'O arquivo está vazio', errBroken: 'O arquivo está incompleto ou corrompido', errNotKova: 'Este não é um backup do Kova (para o outro app use "Importar de outro app")',
   inApp: 'No app', inDocs: 'Documentos/Kova (sobrevive à reinstalação)',
+  shortcuts: 'Atalhos', shortcutsD: 'Lance gastos frequentes com um toque', newShortcut: 'Salvar como atalho', shortcutSaved: 'Atalho salvo', noShortcuts: 'Nenhum atalho ainda',
+  suggested: 'Sugestões do seu histórico', timesUsed: '{n}× em 6 meses', editShortcuts: 'Editar', anyAmount: 'valor na hora', createShortcuts: 'Criar atalhos',
+  appLock: 'Senha ao abrir', appLockD: 'Pede um PIN ao abrir o Kova', useBiometric: 'Desbloquear com digital', enterPin: 'Digite seu PIN', newPin: 'Escolha um PIN de 4 a 6 dígitos',
+  confirmPin: 'Digite o PIN de novo', pinMismatch: 'Os PINs não conferem', wrongPin: 'PIN incorreto', pinSet: 'PIN definido', pinOff: 'Senha removida', currentPin: 'Digite o PIN atual',
+  forgotPin: 'Esqueceu o PIN? Reinstale o Kova e restaure o backup automático.', unlock: 'Desbloquear', usePin: 'Usar PIN',
+  backupFound: 'Backup encontrado', backupFoundD: 'O Kova encontrou uma cópia dos seus dados. Restaurar agora?', restoreNow: 'Restaurar', checkingBackups: 'Procurando backups…',
+  noBackupFound: 'Se você já usava o Kova, escolha o arquivo em Documentos/Kova ou no Google Drive.',
 };
 
 export type TKey = keyof Dict;

@@ -8,6 +8,7 @@ export const Filesystem = {
   readFile: async (_: unknown) => ({ data: '' as string | Blob }),
   appendFile: async (_: unknown) => {},
   rename: async (_: unknown) => {},
+  copy: async (_: unknown) => {},
   getUri: async (_: unknown) => ({ uri: '' }),
 };
 export const Directory = { Cache: 'CACHE', Data: 'DATA', Documents: 'DOCUMENTS' } as const;

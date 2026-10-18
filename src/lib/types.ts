@@ -80,6 +80,11 @@ export interface Settings {
   autoBackup: boolean;
   lastBackup?: string;
   billReminders: boolean;
+  lastBackupTxs?: number;
+  pinHash?: string; // app lock: sha-256(salt + pin)
+  pinSalt?: string;
+  pinLen?: number;
+  biometric?: boolean;
   haptics?: boolean; // vibrate on taps (default on)
   showTags?: boolean; // tags field in the transaction editor (default on)
 }
@@ -90,5 +95,16 @@ export interface State {
   categories: Category[];
   txs: Tx[];
   transfers: Transfer[];
+  shortcuts?: Shortcut[];
   settings: Settings;
+}
+
+/** One-tap launch preset ("Padaria · Café · N26"). */
+export interface Shortcut {
+  id: string;
+  kind: Kind;
+  categoryId: string;
+  accountId: string;
+  amount?: Cents; // fixed amount, optional
+  note: string;
 }

@@ -12,6 +12,7 @@ import { navigate, openOverlay, toast } from '../lib/nav';
 import { openTxEditor } from '../components/TxEditor';
 import { goTx } from './Transactions';
 import { upcomingBills } from '../lib/reminders';
+import { ShortcutStrip } from '../components/Shortcuts';
 
 export function Home() {
   const s = useStore();
@@ -134,6 +135,7 @@ export function Home() {
             <b>{month.rate === null ? '—' : `${month.rate}%`}</b>
           </button>
         </div>
+        <ShortcutStrip />
       </div>
 
       <div className="paper lift">
