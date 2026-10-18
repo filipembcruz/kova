@@ -42,6 +42,8 @@ jobs:
           JAVA_DIR=android/app/src/main/java/io/github/filipembcruz/kova
           mkdir -p $JAVA_DIR
           cp android-src/*.java $JAVA_DIR/
+          sed -i 's/<application/<application android:largeHeap="true"/' android/app/src/main/AndroidManifest.xml
+          cat android/app/src/main/res/xml/file_paths.xml || true
           npx cap sync android
 
       - name: Set version

@@ -3,13 +3,14 @@ import { PiBackspaceBold, PiCheckBold, PiTrashBold, PiCalendarBlankBold, PiHashB
 import type { Attachment, Kind, Repeat, Tx, Transfer } from '../lib/types';
 import { getState, setState, useStore } from '../lib/store';
 import { accountsSorted, addDays, evalExpr, today, toBase, uid, rate, parseIso } from '../lib/calc';
-import { useT } from '../i18n';
+import { useT, getT } from '../i18n';
 import { Bubble, Seg, Sheet, Switch, confirmDialog } from './ui';
 import { openOverlay, toast } from '../lib/nav';
 import { money } from '../lib/format';
-import { tap, pickFile, openBlob, notificationsAllowed } from '../native';
+import { tap, pickFile, openBlob, shareBlob, notificationsAllowed } from '../native';
 import { pickDate } from './Pickers';
-import { putFile, getFile, deleteFile, compressImage, blobToBase64 } from '../lib/files';
+import { putFile, getFile, deleteFile, compressImage } from '../lib/files';
+import { fold } from '../lib/calc';
 
 type Mode = Kind | 'transfer';
 
@@ -20,6 +21,7 @@ export function openTxEditor(opts: { tx?: Tx; transfer?: Transfer; kind?: Mode; 
 const fmtExpr = (cents: number) => (cents / 100).toFixed(2).replace(/\.00$/, '').replace('.', ',');
 
 export function AttachmentThumb({ att, onRemove }: { att: Attachment; onRemove?: () => void }) {
+  const { t } = useT();
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     let u: string | null = null;
@@ -28,7 +30,7 @@ export function AttachmentThumb({ att, onRemove }: { att: Attachment; onRemove?:
   }, [att.id]);
   return (
     <button className="att" onClick={() => viewAttachment(att)}>
-      {url ? <img src={url} alt={att.name} /> : <div style={{ display: 'grid', placeItems: 'center', gap: 2, padding: 4 }}><PiFilePdfDuotone /><span style={{ fontSize: 10, overflow: 'hidden', maxWidth: 66, whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{att.name}</span></div>}
+      {url ? <img src={url} alt={att.name} /> : <div className="att-file"><PiFilePdfDuotone /><span>{att.name}</span><b>{t('open')}</b></div>}
       {onRemove && <span className="x" role="button" onClick={(e) => { e.stopPropagation(); onRemove(); }}><PiXBold /></span>}
     </button>
   );
@@ -39,14 +41,20 @@ export async function viewAttachment(att: Attachment) {
   if (!blob) return;
   if (att.type.startsWith('image/')) {
     const url = URL.createObjectURL(blob);
-    openOverlay(() => (
-      <Sheet title={att.name} actions={<button className="icon-btn" onClick={() => openBlob(blob, att.name, () => blobToBase64(blob))} aria-label="share"><PiShareNetworkBold /></button>}>
-        <div className="sheet-b viewer"><img src={url} alt={att.name} /></div>
-      </Sheet>
-    ));
+    openOverlay(() => <ImageViewer att={att} blob={blob} url={url} />);
     return;
   }
-  await openBlob(blob, att.name, () => blobToBase64(blob));
+  // PDFs and other files open in the phone's own viewer (Drive PDF viewer, etc.)
+  if (!(await openBlob(blob, att.name, att.type))) toast(getT()('openFail'));
+}
+
+function ImageViewer({ att, blob, url }: { att: Attachment; blob: Blob; url: string }) {
+  const { t } = useT();
+  return (
+    <Sheet title={att.name} actions={<button className="icon-btn" onClick={() => shareBlob(blob, att.name)} aria-label={t('share')}><PiShareNetworkBold /></button>}>
+      <div className="sheet-b viewer"><img src={url} alt={att.name} /></div>
+    </Sheet>
+  );
 }
 
 function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: date0, close }: { tx?: Tx; transfer?: Transfer; kind?: Mode; accountId?: string; categoryId?: string; repeat?: Repeat; date?: string; close: () => void }) {
@@ -69,7 +77,8 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
   const [remind, setRemind] = useState<number>(tx?.remind ?? (repeat ? 1 : -1));
   const [atts, setAtts] = useState<Attachment[]>(tx?.attachments ?? []);
   const [tagInput, setTagInput] = useState('');
-  const [typing, setTyping] = useState(false);
+  const [pad, setPad] = useState(true); // our number keypad: only while the amount is being typed
+  const [noteFocus, setNoteFocus] = useState(false);
   const [editingTo, setEditingTo] = useState(false);
 
   const account = s.accounts.find((a) => a.id === acc);
@@ -83,6 +92,31 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
   const future = date > today();
 
   const cats = s.categories.filter((c) => c.kind === mode && (!c.archived || c.id === cat)).sort((a, b) => a.order - b.order);
+  const showTags = mode !== 'transfer' && s.settings.showTags !== false;
+  const notes = useMemo(() => {
+    const m = new Map<string, { n: number; cats: Map<string, number>; last: string }>();
+    const add = (raw: string, catId: string, d: string) => {
+      const v = raw.trim();
+      if (!v) return;
+      const e = m.get(v) ?? { n: 0, cats: new Map(), last: '' };
+      e.n++;
+      e.cats.set(catId, (e.cats.get(catId) ?? 0) + 1);
+      if (d > e.last) e.last = d;
+      m.set(v, e);
+    };
+    for (const x of s.txs) add(x.note, x.categoryId, x.date);
+    for (const x of s.transfers) add(x.note, 'transfer', x.date);
+    return m;
+  }, [s.txs, s.transfers]);
+  const noteSuggestions = useMemo(() => {
+    if (!noteFocus) return [];
+    const key = mode === 'transfer' ? 'transfer' : cat;
+    const q = fold(note.trim());
+    const list = [...notes.entries()].filter(([v, e]) => (q ? fold(v).includes(q) && v !== note.trim() : e.cats.has(key)));
+    const starts = (v: string) => (!q ? 0 : fold(v).startsWith(q) ? 2 : fold(v).split(/\s+/).some((w) => w.startsWith(q)) ? 1 : 0);
+    const score = (v: string, e: { n: number; cats: Map<string, number> }) => starts(v) * 1e6 + (e.cats.get(key) ?? 0) * 1000 + e.n;
+    return list.sort((a, b) => score(b[0], b[1]) - score(a[0], a[1]) || (a[1].last < b[1].last ? 1 : -1)).slice(0, 8).map((x) => x[0]);
+  }, [notes, note, noteFocus, cat, mode]);
   const allTags = useMemo(() => {
     const m = new Map<string, number>();
     for (const x of s.txs) for (const g of x.tags) m.set(g, (m.get(g) ?? 0) + 1);
@@ -199,7 +233,6 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
   const shown = money(editingTo ? toCents : cents, editingTo ? toAccount!.currency : cur, locale);
   const quick = [addDays(today(), -1), today()];
   const custom = !quick.includes(date);
-  const focus = { onFocus: () => setTyping(true), onBlur: () => setTimeout(() => setTyping(false), 150) };
   const tagSuggestions = allTags.filter((g) => !tags.includes(g) && (!tagInput || g.toLowerCase().includes(tagInput.toLowerCase()))).slice(0, 10);
 
   return (
@@ -210,7 +243,7 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
         <button className="icon-btn" style={{ color: 'var(--exp)' }} onClick={remove} aria-label="delete"><PiTrashBold /></button>
       )}
     >
-      <div className="sheet-b" style={{ paddingBottom: 12 }}>
+      <div className="sheet-b" style={{ paddingBottom: 12 }} onFocusCapture={(e) => { if ((e.target as HTMLElement).tagName === 'INPUT') setPad(false); }}>
         <Seg<Mode>
           color
           value={mode}
@@ -222,7 +255,7 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
           ]}
         />
 
-        <div className="amount-box" onClick={() => { setTyping(false); setEditingTo(false); (document.activeElement as HTMLElement)?.blur?.(); }}>
+        <div className={'amount-box' + (pad ? ' on' : '')} onClick={() => { setPad(true); setEditingTo(false); (document.activeElement as HTMLElement)?.blur?.(); }}>
           <div className="cur">{editingTo ? `${t('received')} · ${toAccount?.currency}` : `${t('amount')} · ${cur}`}</div>
           <div className="val" style={{ color: mode === 'income' ? 'var(--inc)' : mode === 'expense' ? 'var(--ink)' : 'var(--xfer)' }}>{shown}</div>
           <div className="expr">{/[+\-×÷]/.test(display) ? display : ' '}</div>
@@ -249,7 +282,7 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
               ))}
             </div>
             {crossCurrency && (
-              <button className="field" style={{ width: '100%', textAlign: 'left', outline: editingTo ? '2px solid var(--brand)' : 'none' }} onClick={() => { setEditingTo(true); if (!toExpr) setToExpr(fmtExpr(autoTo)); }}>
+              <button className="field" style={{ width: '100%', textAlign: 'left', outline: editingTo ? '2px solid var(--brand)' : 'none' }} onClick={() => { setEditingTo(true); setPad(true); if (!toExpr) setToExpr(fmtExpr(autoTo)); }}>
                 <span>{t('received')} ({toAccount!.currency})</span>
                 <b className="num" style={{ fontSize: 20 }}>{money(toCents, toAccount!.currency, locale)}</b>
                 <div className="small muted">1 {cur} = {(toCents / Math.max(cents, 1)).toFixed(4)} {toAccount!.currency}</div>
@@ -322,10 +355,20 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
         <div style={{ height: 12 }} />
         <label className="field">
           <span>{t('note')}</span>
-          <input value={note} placeholder={t('notePh')} {...focus} onChange={(e) => setNote(e.target.value)} />
+          <input value={note} placeholder={t('notePh')} type="text" inputMode="text" autoCapitalize="sentences" autoComplete="off" enterKeyHint="done"
+            onFocus={() => setNoteFocus(true)} onBlur={() => setTimeout(() => setNoteFocus(false), 150)}
+            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+            onChange={(e) => setNote(e.target.value)} />
+          {noteSuggestions.length > 0 && (
+            <div className="note-sugg">
+              {noteSuggestions.map((n) => (
+                <button key={n} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setNote(n); (document.activeElement as HTMLElement)?.blur?.(); }}>{n}</button>
+              ))}
+            </div>
+          )}
         </label>
 
-        {mode !== 'transfer' && (
+        {showTags && (
           <div className="field">
             <span>{t('tags')}</span>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
@@ -334,7 +377,7 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
               ))}
             </div>
             <div className="row" style={{ gap: 8, marginTop: 6 }}>
-              <input value={tagInput} placeholder={t('addTag')} style={{ flex: 1, fontSize: 16 }} {...focus}
+              <input value={tagInput} placeholder={t('addTag')} type="text" inputMode="text" autoComplete="off" enterKeyHint="done" style={{ flex: 1, fontSize: 16 }}
                 onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTag(tagInput)} />
               {tagInput && <button className="mini-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => addTag(tagInput)}><PiPlusBold /> {t('addTag')}</button>}
             </div>
@@ -359,7 +402,7 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
         )}
       </div>
 
-      {!typing && (
+      {pad && (
         <div className="keypad">
           {keys.map((k) =>
             k === 'ok' ? (
@@ -372,7 +415,7 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
           )}
         </div>
       )}
-      {typing && (
+      {!pad && (
         <div className="sheet-f">
           <button className="btn primary" onMouseDown={(e) => e.preventDefault()} onClick={save}><PiCheckBold /> {t('save')}</button>
         </div>

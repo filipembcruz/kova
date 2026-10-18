@@ -334,6 +334,15 @@ input, textarea { user-select: text; }
 .att img { width: 100%; height: 100%; object-fit: cover; }
 .att .x { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; display: grid; place-items: center; }
 .att .x svg { width: 12px; height: 12px; }
+.att-file { display: grid; place-items: center; gap: 2px; padding: 6px 4px; width: 100%; }
+.att-file svg { width: 26px; height: 26px; color: #e5484d; }
+.att-file span { font-size: 10px; font-weight: 600; max-width: 68px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted); }
+.att-file b { font-size: 10.5px; color: var(--brand); }
+.note-sugg { display: flex; gap: 6px; overflow-x: auto; margin: 8px -4px 0; padding: 0 4px 2px; scrollbar-width: none; }
+.note-sugg::-webkit-scrollbar { display: none; }
+.note-sugg button { flex: none; padding: 7px 12px; border-radius: 999px; background: var(--sunk); color: var(--ink); font-size: 13.5px; font-weight: 500; white-space: nowrap; max-width: 75vw; overflow: hidden; text-overflow: ellipsis; }
+.amount-box { border-radius: 20px; transition: background .2s; }
+.amount-box:not(.on) { background: var(--sunk); }
 .att.add { color: var(--brand); border: 1.5px dashed color-mix(in srgb, var(--brand) 50%, transparent); box-shadow: none; background: transparent; }
 .att svg { width: 26px; height: 26px; }
 .viewer img { width: 100%; border-radius: 18px; display: block; }

@@ -140,8 +140,8 @@ export function Transactions() {
     if (st && en) return { gran: g, start: st, end: en };
     return periodOf(g, today(), s.settings.weekStart);
   });
-  const [allTime, setAllTime] = useState(false);
-  const [q, setQ] = useState('');
+  const [allTime, setAllTime] = useState(q0.get('all') === '1');
+  const [q, setQ] = useState(q0.get('q') || '');
   const [sort, setSort] = useState<Sort>((q0.get('sort') as Sort) || 'date');
   const [view, setView] = useState<View>((q0.get('view') as View) || 'list');
   const base = s.settings.baseCurrency;

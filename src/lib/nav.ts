@@ -93,7 +93,27 @@ export function closeOverlay() {
   if (overlays.length) history.back();
 }
 
+let closeAllDone: (() => void) | null = null;
+/** Closes every open sheet (one history jump), then resolves. */
+export function closeAllOverlays(): Promise<void> {
+  const n = overlays.filter((o) => !o.closing).length;
+  if (!n) return Promise.resolve();
+  return new Promise((res) => {
+    closeAllDone = res;
+    history.go(-n);
+  });
+}
+
 window.addEventListener('popstate', () => {
+  if (closeAllDone) {
+    const done = closeAllDone;
+    closeAllDone = null;
+    overlays = [];
+    emitOv();
+    emitRoute();
+    done();
+    return;
+  }
   const live = overlays.filter((o) => !o.closing);
   if (live.length) {
     const top = live[live.length - 1];

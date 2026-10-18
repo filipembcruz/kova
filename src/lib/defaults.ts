@@ -28,6 +28,8 @@ export function defaultSettings(): Settings {
     onboarded: false,
     autoBackup: true,
     billReminders: true,
+    haptics: true,
+    showTags: true,
   };
 }
 

@@ -8,10 +8,65 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 
 export const isNative = () => Capacitor.isNativePlatform();
 
+// Large strings are written in slices: one huge message through the native bridge can run the
+// phone out of memory and close the app (that was the backup crash).
+const CHUNK = 256 * 1024;
+async function writeTextChunked(path: string, directory: Directory, text: string) {
+  const tmp = `${path}.${Date.now()}.part`;
+  let i = 0, first = true;
+  while (first || i < text.length) {
+    let end = Math.min(i + CHUNK, text.length);
+    const c = text.charCodeAt(end - 1);
+    if (end < text.length && c >= 0xd800 && c <= 0xdbff) end--; // never split an emoji
+    const data = text.slice(i, end);
+    if (first) await Filesystem.writeFile({ path: tmp, data, directory, encoding: Encoding.UTF8, recursive: true });
+    else await Filesystem.appendFile({ path: tmp, data, directory, encoding: Encoding.UTF8 });
+    first = false;
+    i = end;
+  }
+  try { await Filesystem.deleteFile({ path, directory }); } catch { /* not there yet */ }
+  await Filesystem.rename({ from: tmp, to: path, directory, toDirectory: directory });
+  return (await Filesystem.getUri({ path, directory })).uri;
+}
+
+async function writeBlobChunked(path: string, directory: Directory, blob: Blob) {
+  const step = 192 * 1024; // multiple of 3 bytes -> clean base64 slices
+  for (let i = 0; i === 0 || i < blob.size; i += step) {
+    const data = await blobB64(blob.slice(i, i + step));
+    if (i === 0) await Filesystem.writeFile({ path, data, directory, recursive: true });
+    else await Filesystem.appendFile({ path, data, directory });
+  }
+  return (await Filesystem.getUri({ path, directory })).uri;
+}
+
+function blobB64(b: Blob): Promise<string> {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(String(fr.result).split(',')[1] ?? '');
+    fr.onerror = () => rej(fr.error);
+    fr.readAsDataURL(b);
+  });
+}
+
+/** Reads a file of the app through the WebView (no bridge copy), falling back to the plugin. */
+async function readTextFile(path: string, directory: Directory): Promise<string> {
+  try {
+    const { uri } = await Filesystem.getUri({ path, directory });
+    const r = await fetch(Capacitor.convertFileSrc(uri));
+    if (r.ok) return await r.text();
+  } catch { /* fallback */ }
+  const r = await Filesystem.readFile({ path, directory, encoding: Encoding.UTF8 });
+  return typeof r.data === 'string' ? r.data : await (r.data as Blob).text();
+}
+
+const safeName = (n: string) => n.replace(/[^\w.\-]+/g, '_').slice(-80) || 'file';
+
 export async function saveTextFile(name: string, content: string, mime: string, title: string) {
   if (isNative()) {
-    const res = await Filesystem.writeFile({ path: name, data: content, directory: Directory.Cache, encoding: Encoding.UTF8 });
-    await Share.share({ title, files: [res.uri], dialogTitle: title });
+    const uri = await writeTextChunked(`share/${safeName(name)}`, Directory.Cache, content);
+    try {
+      await Share.share({ title, files: [uri], dialogTitle: title });
+    } catch { /* user closed the share sheet */ }
     return;
   }
   const blob = new Blob([content], { type: mime });
@@ -43,6 +98,7 @@ export function pickFile(accept = '*/*'): Promise<File | null> {
 type Insets = { top?: number; bottom?: number; ime?: number };
 const SystemColor = registerPlugin<{
   set(o: { color: string; dark: boolean; navDark?: boolean }): Promise<void>;
+  openFile(o: { path: string; mime: string }): Promise<void>;
   getInsets(): Promise<Insets>;
   addListener(ev: 'insets', cb: (i: Insets) => void): Promise<{ remove: () => void }>;
 }>('SystemColor');
@@ -76,8 +132,10 @@ export async function setStatusBar(dark: boolean, color: string, navDark?: boole
   } catch { /* plugin missing */ }
 }
 
+let hapticsOn = true;
+export function setHaptics(on: boolean) { hapticsOn = on; }
 export function tap() {
-  if (!isNative()) return;
+  if (!isNative() || !hapticsOn) return;
   Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
 }
 
@@ -92,10 +150,10 @@ export async function writeAutoBackup(json: string, day: string): Promise<boolea
     try { localStorage.setItem('kova-autobackup', json); } catch { /* ignore */ }
     return true;
   }
-  await Filesystem.writeFile({ path: `${BK_DIR}/kova-${day}.json`, data: json, directory: Directory.Data, encoding: Encoding.UTF8, recursive: true });
+  await writeTextChunked(`${BK_DIR}/kova-${day}.json`, Directory.Data, json);
   try {
     const list = await Filesystem.readdir({ path: BK_DIR, directory: Directory.Data });
-    const names = list.files.map((f: any) => (typeof f === 'string' ? f : f.name)).filter((n: string) => n.startsWith('kova-')).sort();
+    const names = list.files.map((f: any) => (typeof f === 'string' ? f : f.name)).filter((n: string) => n.startsWith('kova-') && n.endsWith('.json')).sort();
     for (const old of names.slice(0, Math.max(0, names.length - KEEP))) {
       await Filesystem.deleteFile({ path: `${BK_DIR}/${old}`, directory: Directory.Data });
     }
@@ -109,7 +167,7 @@ export async function listAutoBackups(): Promise<string[]> {
   }
   try {
     const list = await Filesystem.readdir({ path: BK_DIR, directory: Directory.Data });
-    return list.files.map((f: any) => (typeof f === 'string' ? f : f.name)).filter((n: string) => n.startsWith('kova-')).sort().reverse();
+    return list.files.map((f: any) => (typeof f === 'string' ? f : f.name)).filter((n: string) => n.startsWith('kova-') && n.endsWith('.json')).sort().reverse();
   } catch {
     return [];
   }
@@ -119,8 +177,7 @@ export async function readAutoBackup(name: string): Promise<string | null> {
   if (!isNative()) {
     try { return localStorage.getItem('kova-autobackup'); } catch { return null; }
   }
-  const r = await Filesystem.readFile({ path: `${BK_DIR}/${name}`, directory: Directory.Data, encoding: Encoding.UTF8 });
-  return typeof r.data === 'string' ? r.data : await (r.data as Blob).text();
+  return readTextFile(`${BK_DIR}/${name}`, Directory.Data);
 }
 
 // ---------- keyboard ----------
@@ -156,24 +213,60 @@ export function minimizeApp() {
 }
 
 // ---------- open / share a stored file ----------
-export async function openBlob(blob: Blob, name: string, base64: () => Promise<string>) {
+async function cacheBlob(blob: Blob, name: string) {
+  return writeBlobChunked(`open/${safeName(name)}`, Directory.Cache, blob);
+}
+
+/** Opens a PDF / image in the phone's viewer app (Drive PDF viewer, Gallery…). */
+export async function openBlob(blob: Blob, name: string, mime: string): Promise<boolean> {
   if (isNative()) {
-    const res = await Filesystem.writeFile({ path: name, data: await base64(), directory: Directory.Cache });
-    await Share.share({ title: name, files: [res.uri] });
-    return;
+    const uri = await cacheBlob(blob, name);
+    try {
+      await SystemColor.openFile({ path: uri, mime: mime || blob.type || '*/*' });
+      return true;
+    } catch {
+      try { await Share.share({ title: name, files: [uri] }); return true; } catch { return false; }
+    }
   }
   window.open(URL.createObjectURL(blob), '_blank');
+  return true;
+}
+
+export async function shareBlob(blob: Blob, name: string) {
+  if (isNative()) {
+    const uri = await cacheBlob(blob, name);
+    try { await Share.share({ title: name, files: [uri], dialogTitle: name }); } catch { /* closed */ }
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+}
+
+// ---------- crash notes written by MainActivity ----------
+export async function takeCrashNote(): Promise<string | null> {
+  if (!isNative()) return null;
+  try {
+    const txt = await readTextFile('crash.txt', Directory.Data);
+    await Filesystem.deleteFile({ path: 'crash.txt', directory: Directory.Data });
+    return txt || null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------- backups that survive uninstall (public Documents/Kova) ----------
 export async function writePublicBackup(json: string) {
   if (!isNative()) return false;
-  try {
-    await Filesystem.writeFile({ path: 'Kova/kova-backup.json', data: json, directory: Directory.Documents, encoding: Encoding.UTF8, recursive: true });
-    return true;
-  } catch {
-    return false;
+  // A file left by a previous install can't be overwritten on Android 11+, so fall back to a dated name.
+  for (const name of ['Kova/kova-backup.json', `Kova/kova-backup-${new Date().toISOString().slice(0, 10)}.json`]) {
+    try {
+      await writeTextChunked(name, Directory.Documents, json);
+      return true;
+    } catch { /* try next */ }
   }
+  return false;
 }
 
 // ---------- bill reminders ----------

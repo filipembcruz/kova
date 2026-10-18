@@ -12,7 +12,9 @@ import { Categories } from './screens/Categories';
 import { Settings, runMmImport, updateRates, restoreFromFile } from './screens/Settings';
 import { Transactions } from './screens/Transactions';
 import { Bills } from './screens/Bills';
-import { setStatusBar } from './native';
+import { setStatusBar, setHaptics, takeCrashNote } from './native';
+import { openOverlay, toast } from './lib/nav';
+import { Sheet } from './components/ui';
 
 function useTheme() {
   const s = useStore();
@@ -56,6 +58,10 @@ export function App() {
 function Shell({ dark }: { dark: boolean }) {
   const s = useStore();
   useSystemBars(dark, s.settings.onboarded);
+  useEffect(() => { setHaptics(s.settings.haptics !== false); }, [s.settings.haptics]);
+  useEffect(() => {
+    takeCrashNote().then((txt) => { if (txt) openOverlay(() => <CrashSheet text={txt} />); });
+  }, []);
   useEffect(() => {
     const last = s.settings.ratesUpdated ? new Date(s.settings.ratesUpdated).getTime() : 0;
     if (s.settings.onboarded && Date.now() - last > 12 * 3600e3 && s.accounts.some((a) => a.currency !== s.settings.baseCurrency)) updateRates();
@@ -150,5 +156,20 @@ function Welcome() {
       </button>
       <div style={{ fontSize: 12.5, opacity: 0.7, marginTop: 12, textAlign: 'center' }}>{t('restoreHint')}</div>
     </div>
+  );
+}
+
+function CrashSheet({ text }: { text: string }) {
+  const { t } = useT();
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(text); toast(t('copied')); } catch { /* ignore */ }
+  };
+  return (
+    <Sheet title={t('crashTitle')} footer={<button className="btn primary" onClick={copy}>{t('copy')}</button>}>
+      <div className="sheet-b">
+        <div className="small muted" style={{ marginBottom: 10 }}>{t('crashText')}</div>
+        <pre style={{ whiteSpace: 'pre-wrap', fontSize: 11, background: 'var(--sunk)', padding: 12, borderRadius: 14, maxHeight: '50vh', overflow: 'auto' }}>{text.slice(-6000)}</pre>
+      </div>
+    </Sheet>
   );
 }

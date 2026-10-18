@@ -19,7 +19,7 @@ export function Accounts() {
   const list = accountsSorted(s.accounts);
   const active = list.filter((a) => !a.archived);
   const archived = list.filter((a) => a.archived);
-  const hide = s.settings.hideBalance;
+  const hide = false; // privacy mode only applies to Home: this screen is for managing accounts
   const base = s.settings.baseCurrency;
 
   const positive = active.filter((a) => a.includeInTotal).map((a) => ({ a, v: Math.max(toBase(s, bal.get(a.id) ?? 0, a.currency), 0) })).filter((p) => p.v > 0).sort((x, y) => y.v - x.v);

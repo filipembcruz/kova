@@ -1,6 +1,11 @@
 package io.github.filipembcruz.kova;
 
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
 import android.graphics.Color;
+import android.net.Uri;
+import androidx.core.content.FileProvider;
+import java.io.File;
 import android.view.View;
 import android.view.Window;
 import androidx.core.graphics.Insets;
@@ -62,5 +67,26 @@ public class SystemColorPlugin extends Plugin {
                 call.reject(e.getMessage());
             }
         });
+    }
+
+    /** Opens a cached file (PDF, image) in the phone's own viewer app. */
+    @PluginMethod
+    public void openFile(PluginCall call) {
+        String path = call.getString("path");
+        String mime = call.getString("mime", "*/*");
+        if (path == null) { call.reject("NO_PATH"); return; }
+        try {
+            File f = new File(Uri.parse(path).getPath());
+            Uri uri = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".fileprovider", f);
+            Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(uri, mime);
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            getActivity().startActivity(i);
+            call.resolve();
+        } catch (ActivityNotFoundException e) {
+            call.reject("NO_APP");
+        } catch (Exception e) {
+            call.reject(String.valueOf(e.getMessage()));
+        }
     }
 }

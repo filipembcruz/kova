@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { PiUserDuotone, PiTranslateDuotone, PiPaletteDuotone, PiCurrencyCircleDollarDuotone, PiArrowsClockwiseBold, PiEyeSlashDuotone, PiCalendarDuotone, PiDownloadSimpleDuotone, PiUploadSimpleDuotone, PiFileCsvDuotone, PiTrashDuotone, PiHeartDuotone, PiCaretRightBold, PiTagDuotone, PiSwapDuotone, PiCloudCheckDuotone, PiHashDuotone, PiReceiptDuotone, PiGoogleDriveLogoDuotone, PiClockCounterClockwiseDuotone } from 'react-icons/pi';
+import { PiUserDuotone, PiTranslateDuotone, PiPaletteDuotone, PiCurrencyCircleDollarDuotone, PiArrowsClockwiseBold, PiEyeSlashDuotone, PiCalendarDuotone, PiDownloadSimpleDuotone, PiUploadSimpleDuotone, PiFileCsvDuotone, PiTrashDuotone, PiHeartDuotone, PiCaretRightBold, PiTagDuotone, PiSwapDuotone, PiCloudCheckDuotone, PiHashDuotone, PiReceiptDuotone, PiGoogleDriveLogoDuotone, PiClockCounterClockwiseDuotone, PiVibrateDuotone, PiChatTextDuotone, PiMagnifyingGlassBold } from 'react-icons/pi';
 import type { State } from '../lib/types';
 import { getState, replaceState, setState, useStore, backupNow } from '../lib/store';
 import { useT } from '../i18n';
 import { CURRENCIES, initialState, detectLang } from '../lib/defaults';
 import { Switch, Seg, confirmDialog, Sheet } from '../components/ui';
-import { navigate, openOverlay, toast } from '../lib/nav';
+import { navigate, openOverlay, toast, closeAllOverlays } from '../lib/nav';
 import { importMmBackup } from '../lib/importer';
 import { pickFile, saveTextFile, listAutoBackups, readAutoBackup } from '../native';
-import { today } from '../lib/calc';
+import { today, fold } from '../lib/calc';
 
 declare const __APP_VERSION__: string;
 function Ico({ children }: { c?: string; children: React.ReactNode }) {
@@ -42,8 +42,13 @@ export async function updateRates(failMsg?: string) {
 }
 
 export async function exportBackupFile(t: (k: any) => string) {
-  const { buildBackup } = await import('../lib/backup');
-  await saveTextFile(`kova-backup-${today()}.json`, await buildBackup(), 'application/json', t('exportBackup'));
+  try {
+    toast(t('backingUp'));
+    const { buildBackup } = await import('../lib/backup');
+    await saveTextFile(`kova-backup-${today()}.json`, await buildBackup(), 'application/json', t('exportBackup'));
+  } catch {
+    toast(t('backupFail'));
+  }
 }
 
 export async function restoreFromFile(t: (k: any) => string, ask = true) {
@@ -162,6 +167,11 @@ export function Settings() {
           <Switch on={st.hideBalance} onChange={(v) => set({ hideBalance: v })} />
         </div>
         <div className="setting">
+          <Ico><PiVibrateDuotone /></Ico>
+          <div className="grow"><div className="t">{t('haptics')}</div><div className="s">{t('hapticsD')}</div></div>
+          <Switch on={st.haptics !== false} onChange={(v) => set({ haptics: v })} />
+        </div>
+        <div className="setting">
           <Ico c="linear-gradient(145deg,#ffd36b,#ffb020)"><PiCalendarDuotone /></Ico>
           <div className="grow"><div className="t">{t('weekStartsOn')}</div></div>
           <Seg value={String(st.weekStart) as '0' | '1'} onChange={(v) => set({ weekStart: Number(v) as 0 | 1 })} options={[{ v: '1', label: t('monday') }, { v: '0', label: t('sunday') }]} />
@@ -204,9 +214,19 @@ export function Settings() {
             {st.ratesUpdated && <div className="small muted" style={{ padding: '0 4px' }}>{t('ratesUpdated')}: {new Date(st.ratesUpdated).toLocaleString(locale)}</div>}
           </div>
         )}
+        <div className="setting">
+          <Ico><PiHashDuotone /></Ico>
+          <div className="grow"><div className="t">{t('showTags')}</div><div className="s">{t('showTagsD')}</div></div>
+          <Switch on={st.showTags !== false} onChange={(v) => set({ showTags: v })} />
+        </div>
         <button className="setting" onClick={() => openOverlay(() => <TagsSheet />)}>
           <Ico><PiHashDuotone /></Ico>
           <div className="grow"><div className="t">{t('manageTags')}</div></div>
+          <PiCaretRightBold className="muted" />
+        </button>
+        <button className="setting" onClick={() => openOverlay(() => <NotesSheet />)}>
+          <Ico><PiChatTextDuotone /></Ico>
+          <div className="grow"><div className="t">{t('manageNotes')}</div><div className="s">{t('manageNotesD')}</div></div>
           <PiCaretRightBold className="muted" />
         </button>
         <button className="setting" onClick={() => navigate('/bills')}>
@@ -232,9 +252,9 @@ export function Settings() {
           </div>
           <Switch on={st.autoBackup} onChange={(v) => set({ autoBackup: v })} />
         </div>
-        <button className="setting" onClick={async () => { if (await backupNow()) toast(t('backupDone')); }}>
+        <button className="setting" disabled={busy} onClick={async () => { setBusy(true); toast(t('backingUp')); const ok = await backupNow(); setBusy(false); toast(ok ? t('backupDone') : t('backupFail')); }}>
           <Ico><PiArrowsClockwiseBold /></Ico>
-          <div className="grow"><div className="t">{t('backupNow')}</div></div>
+          <div className="grow"><div className="t">{busy ? t('backingUp') : t('backupNow')}</div></div>
         </button>
         <button className="setting" onClick={exportJson}>
           <Ico><PiGoogleDriveLogoDuotone /></Ico>
@@ -303,6 +323,63 @@ function TagsSheet() {
             </button>
           ))}
         </div>
+      </div>
+    </Sheet>
+  );
+}
+
+function NotesSheet() {
+  const s = useStore();
+  const { t } = useT();
+  const [q, setQ] = useState('');
+  const notes = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const x of s.txs) if (x.note.trim()) m.set(x.note.trim(), (m.get(x.note.trim()) ?? 0) + 1);
+    for (const x of s.transfers) if (x.note.trim()) m.set(x.note.trim(), (m.get(x.note.trim()) ?? 0) + 1);
+    return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [s.txs, s.transfers]);
+  const shown = notes.filter(([n]) => !q || fold(n).includes(fold(q)));
+  return (
+    <Sheet title={t('manageNotes')}>
+      <div className="sheet-b">
+        <div className="search" style={{ margin: '0 0 12px' }}><PiMagnifyingGlassBold /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('search')} /></div>
+        {shown.length === 0 && <div className="empty">{t('noNotes')}</div>}
+        <div className="paper flush">
+          {shown.slice(0, 300).map(([n, c]) => (
+            <button key={n} className="setting" onClick={() => openOverlay((close) => <NoteEdit note={n} count={c} close={close} />)}>
+              <Ico><PiChatTextDuotone /></Ico>
+              <div className="grow"><div className="t" style={{ whiteSpace: 'normal' }}>{n}</div><div className="s">{c} {t('transactions').toLowerCase()}</div></div>
+              <PiCaretRightBold className="muted" />
+            </button>
+          ))}
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+
+function NoteEdit({ note, count, close }: { note: string; count: number; close: () => void }) {
+  const { t } = useT();
+  const [v, setV] = useState(note);
+  const apply = (nv: string) =>
+    setState((st) => ({
+      ...st,
+      txs: st.txs.map((x) => (x.note.trim() === note ? { ...x, note: nv } : x)),
+      transfers: st.transfers.map((x) => (x.note.trim() === note ? { ...x, note: nv } : x)),
+    }));
+  const save = () => { apply(v.trim()); toast(t('savedOk')); close(); };
+  const clear = async () => {
+    if (!(await confirmDialog(t('clearNote') + ` (${count})`, t('clearNote'), t('cancel')))) return;
+    apply('');
+    close();
+  };
+  const see = async () => { await closeAllOverlays(); navigate(`/tx?kind=all&all=1&q=${encodeURIComponent(note)}`); };
+  return (
+    <Sheet title={t('manageNotes')} footer={<><button className="btn danger" onClick={clear}>{t('clearNote')}</button><button className="btn primary" onClick={save}>{t('save')}</button></>}>
+      <div className="sheet-b">
+        <label className="field"><span>{t('note')}</span><input value={v} type="text" inputMode="text" onChange={(e) => setV(e.target.value)} /></label>
+        <div className="small muted" style={{ margin: '0 6px 12px' }}>{t('renameNoteHint')}</div>
+        <button className="btn ghost" style={{ width: '100%' }} onClick={see}><PiMagnifyingGlassBold /> {t('seeTransactions')} ({count})</button>
       </div>
     </Sheet>
   );

@@ -1,4 +1,4 @@
-import { useStore } from '../lib/store';
+import { useStore, getState } from '../lib/store';
 import { detectLang } from '../lib/defaults';
 
 const en = {
@@ -76,6 +76,11 @@ const en = {
   seeByCategory: 'See totals by category', sortHigh: 'Highest first', sortLow: 'Lowest first', tapBar: 'Tap a bar to see its value.', tomorrow: 'Tomorrow',
   suggestedBills: 'Detected fixed costs', suggestedBillsD: 'They repeat every month in your history. Add them to get reminders.', addFixed: 'Add',
   perDay: '/day', item: 'item', items: 'items', archivedAccounts: 'Archived accounts', convertedAt: 'Converted to',
+  haptics: 'Vibration', hapticsD: 'Short vibration when tapping keys and buttons', showTags: 'Tags in transactions', showTagsD: 'Show the tags field when adding a transaction',
+  manageNotes: 'Notes', manageNotesD: 'See, rename or clear notes you reuse', noNotes: 'No notes yet', renameNoteHint: 'Changes this note in every transaction that uses it.',
+  seeTransactions: 'See transactions', clearNote: 'Remove note', backingUp: 'Backing up…', backupFail: 'Could not save the backup', open: 'Open', share: 'Share',
+  openFail: 'No app on the phone can open this file. Use Share instead.', crashTitle: 'Kova closed unexpectedly', crashText: 'This is what happened. You can copy it and send it to the developer.', copy: 'Copy', copied: 'Copied',
+  editNotes: 'Edit', fileSize: 'Size',
 };
 
 type Dict = typeof en;
@@ -155,6 +160,11 @@ const pt: Dict = {
   seeByCategory: 'Ver totais por categoria', sortHigh: 'Maior valor', sortLow: 'Menor valor', tapBar: 'Toque numa barra para ver o valor.', tomorrow: 'Amanhã',
   suggestedBills: 'Gastos fixos detectados', suggestedBillsD: 'Eles se repetem todo mês no seu histórico. Adicione para receber lembretes.', addFixed: 'Adicionar',
   perDay: '/dia', item: 'item', items: 'itens', archivedAccounts: 'Contas arquivadas', convertedAt: 'Convertido para',
+  haptics: 'Vibração', hapticsD: 'Vibração curta ao tocar teclas e botões', showTags: 'Tags nas transações', showTagsD: 'Mostrar o campo de tags ao lançar uma transação',
+  manageNotes: 'Comentários', manageNotesD: 'Ver, renomear ou limpar comentários que você repete', noNotes: 'Nenhum comentário ainda', renameNoteHint: 'Altera este comentário em todas as transações que o usam.',
+  seeTransactions: 'Ver transações', clearNote: 'Remover comentário', backingUp: 'Fazendo backup…', backupFail: 'Não foi possível salvar o backup', open: 'Abrir', share: 'Compartilhar',
+  openFail: 'Nenhum app do celular abre este arquivo. Use Compartilhar.', crashTitle: 'O Kova fechou inesperadamente', crashText: 'Foi isto que aconteceu. Você pode copiar e enviar para o desenvolvedor.', copy: 'Copiar', copied: 'Copiado',
+  editNotes: 'Editar', fileSize: 'Tamanho',
 };
 
 export type TKey = keyof Dict;
@@ -174,4 +184,15 @@ export function useT() {
     return v;
   };
   return { t, lang, locale: lang === 'pt' ? 'pt-BR' : 'en-US' };
+}
+
+/** Translator outside React components (reads the current language from the store). */
+export function getT() {
+  const lang = resolveLang(getState().settings.lang);
+  const d = dicts[lang];
+  return (k: TKey, vars?: Record<string, string>) => {
+    let v = d[k] ?? en[k] ?? k;
+    if (vars) for (const [a, b] of Object.entries(vars)) v = v.replace(`{${a}}`, b);
+    return v;
+  };
 }

@@ -80,6 +80,8 @@ export interface Settings {
   autoBackup: boolean;
   lastBackup?: string;
   billReminders: boolean;
+  haptics?: boolean; // vibrate on taps (default on)
+  showTags?: boolean; // tags field in the transaction editor (default on)
 }
 
 export interface State {
