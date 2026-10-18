@@ -15,7 +15,7 @@ import { Bills } from './screens/Bills';
 import { setStatusBar, setHaptics, takeCrashNote, listAutoBackups, readAutoBackup, type BackupEntry } from './native';
 import { LockScreen } from './components/Lock';
 import { applyBackupText, restoreError } from './screens/Settings';
-import { openOverlay, toast } from './lib/nav';
+import { openOverlay, toast, getAddKind } from './lib/nav';
 import { Sheet } from './components/ui';
 
 function useTheme() {
@@ -116,7 +116,7 @@ function Main() {
     <>
       <div className={'app' + (isTab ? '' : ' sub') + (path === '/' ? ' home' : '')}>{screen}</div>
       {showFab && (
-        <button className="fab" style={!isTab ? { bottom: 'calc(20px + var(--safe-bottom))' } : undefined} onClick={() => openTxEditor({ accountId: accFromRoute })} aria-label="add">
+        <button className="fab" style={!isTab ? { bottom: 'calc(20px + var(--safe-bottom))' } : undefined} onClick={() => openTxEditor({ accountId: accFromRoute, kind: getAddKind() })} aria-label="add">
           <PiPlusBold />
         </button>
       )}

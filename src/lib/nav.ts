@@ -129,6 +129,11 @@ window.addEventListener('popstate', () => {
 });
 window.addEventListener('hashchange', emitRoute);
 
+// ---------- default type for the + button (follows the tab you are looking at) ----------
+let addKind: 'expense' | 'income' | 'transfer' = 'expense';
+export const setAddKind = (k: 'expense' | 'income' | 'transfer') => { addKind = k; };
+export const getAddKind = () => addKind;
+
 // ---------- toast ----------
 let toastMsg: { text: string; id: number } | null = null;
 const toastListeners = new Set<() => void>();

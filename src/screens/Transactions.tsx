@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PiArrowLeftBold, PiMagnifyingGlassBold, PiArrowRightBold, PiXBold, PiSlidersHorizontalBold, PiCheckBold, PiArrowsClockwiseBold, PiPaperclipBold, PiListBulletsBold, PiChartPieSliceBold, PiPencilSimpleBold } from 'react-icons/pi';
 import type { Kind, Tx, Transfer } from '../lib/types';
 import { useStore } from '../lib/store';
@@ -8,7 +8,7 @@ import { dayLabel, money, shortDate } from '../lib/format';
 import { Bubble, Seg, Empty, Sheet } from '../components/ui';
 import { Donut } from '../components/charts';
 import { PeriodControl, periodText } from '../components/Pickers';
-import { navigate, openOverlay, useRoute } from '../lib/nav';
+import { navigate, openOverlay, useRoute, setAddKind } from '../lib/nav';
 import { openTxEditor } from '../components/TxEditor';
 import { openAccountEditor } from '../components/Editors';
 
@@ -133,6 +133,7 @@ export function Transactions() {
   const r = useRoute();
   const q0 = r.query;
   const [kind, setKind] = useState<KindF>((q0.get('kind') as KindF) || 'all');
+  useEffect(() => { if (kind !== 'all') setAddKind(kind); }, [kind]);
   const [accId, setAccId] = useState(q0.get('acc') || '');
   const [cats, setCats] = useState<string[]>(q0.get('cat') ? [q0.get('cat')!] : []);
   const [period, setPeriod] = useState<Period>(() => {

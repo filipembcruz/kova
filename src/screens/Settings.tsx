@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { PiUserDuotone, PiTranslateDuotone, PiPaletteDuotone, PiCurrencyCircleDollarDuotone, PiArrowsClockwiseBold, PiEyeSlashDuotone, PiCalendarDuotone, PiDownloadSimpleDuotone, PiUploadSimpleDuotone, PiFileCsvDuotone, PiTrashDuotone, PiHeartDuotone, PiCaretRightBold, PiTagDuotone, PiSwapDuotone, PiCloudCheckDuotone, PiHashDuotone, PiReceiptDuotone, PiGoogleDriveLogoDuotone, PiClockCounterClockwiseDuotone, PiVibrateDuotone, PiChatTextDuotone, PiMagnifyingGlassBold, PiEnvelopeSimpleDuotone, PiLockKeyDuotone, PiFingerprintDuotone, PiLightningDuotone } from 'react-icons/pi';
+import { PiUserDuotone, PiTranslateDuotone, PiPaletteDuotone, PiCurrencyCircleDollarDuotone, PiArrowsClockwiseBold, PiEyeSlashDuotone, PiCalendarDuotone, PiDownloadSimpleDuotone, PiFileCsvDuotone, PiTrashDuotone, PiHeartDuotone, PiCaretRightBold, PiTagDuotone, PiSwapDuotone, PiCloudCheckDuotone, PiHashDuotone, PiReceiptDuotone, PiShareNetworkDuotone, PiClockCounterClockwiseDuotone, PiVibrateDuotone, PiChatTextDuotone, PiMagnifyingGlassBold, PiLockKeyDuotone, PiFingerprintDuotone, PiLightningDuotone } from 'react-icons/pi';
 import type { State } from '../lib/types';
 import { getState, replaceState, setState, useStore, backupNow } from '../lib/store';
 import { useT } from '../i18n';
@@ -131,7 +131,6 @@ export function Settings() {
     });
   };
 
-  const exportJson = () => exportBackupFile(t);
   const restoreJson = () => restoreFromFile(t);
   const exportCsv = async () => {
     const x = getState();
@@ -257,11 +256,16 @@ export function Settings() {
           <div className="grow"><div className="t">{t('manageTags')}</div></div>
           <PiCaretRightBold className="muted" />
         </button>
-        <button className="setting" onClick={() => openOverlay(() => <ShortcutsSheet />)}>
+        <div className="setting">
+          <Ico><PiLightningDuotone /></Ico>
+          <div className="grow"><div className="t">{t('shortcutsOn')}</div><div className="s">{t('shortcutsOnD')}</div></div>
+          <Switch on={st.shortcutsOn !== false} onChange={(v) => set({ shortcutsOn: v })} />
+        </div>
+        {st.shortcutsOn !== false && <button className="setting" onClick={() => openOverlay(() => <ShortcutsSheet />)}>
           <Ico><PiLightningDuotone /></Ico>
           <div className="grow"><div className="t">{t('shortcuts')}</div><div className="s">{t('shortcutsD')}</div></div>
           <PiCaretRightBold className="muted" />
-        </button>
+        </button>}
         <button className="setting" onClick={() => openOverlay(() => <NotesSheet />)}>
           <Ico><PiChatTextDuotone /></Ico>
           <div className="grow"><div className="t">{t('manageNotes')}</div><div className="s">{t('manageNotesD')}</div></div>
@@ -294,13 +298,9 @@ export function Settings() {
           <Ico><PiArrowsClockwiseBold /></Ico>
           <div className="grow"><div className="t">{busy ? t('backingUp') : t('backupNow')}</div></div>
         </button>
-        <button className="setting" onClick={exportJson}>
-          <Ico><PiGoogleDriveLogoDuotone /></Ico>
-          <div className="grow"><div className="t">{t('saveToDrive')}</div><div className="s">{t('saveToDriveD')}</div></div>
-        </button>
         <button className="setting" onClick={() => exportBackupFile(t, true)}>
-          <Ico><PiEnvelopeSimpleDuotone /></Ico>
-          <div className="grow"><div className="t">{t('emailBackup')}</div><div className="s">{t('emailBackupD')}</div></div>
+          <Ico><PiShareNetworkDuotone /></Ico>
+          <div className="grow"><div className="t">{t('shareBackup')}</div><div className="s">{t('shareBackupD')}</div></div>
         </button>
         <button className="setting" onClick={() => openOverlay(() => <AutoBackups />)}>
           <Ico><PiClockCounterClockwiseDuotone /></Ico>
@@ -314,10 +314,6 @@ export function Settings() {
         <button className="setting" onClick={() => runMmImport(t)}>
           <Ico c="linear-gradient(145deg,#a996ff,#5b4bdb)"><PiDownloadSimpleDuotone /></Ico>
           <div className="grow"><div className="t">{t('importOther')}</div><div className="s">{t('importOtherD')}</div></div>
-        </button>
-        <button className="setting" onClick={exportJson}>
-          <Ico c="linear-gradient(145deg,#7ce8b3,#12b886)"><PiUploadSimpleDuotone /></Ico>
-          <div className="grow"><div className="t">{t('exportBackup')}</div><div className="s">{t('exportBackupD')}</div></div>
         </button>
         <button className="setting" onClick={restoreJson}>
           <Ico c="linear-gradient(145deg,#6fd3ff,#3d8bff)"><PiDownloadSimpleDuotone /></Ico>

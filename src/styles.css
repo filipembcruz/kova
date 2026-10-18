@@ -369,7 +369,7 @@ input, textarea { user-select: text; }
 .note-sugg { display: flex; gap: 6px; overflow-x: auto; margin: 8px -4px 0; padding: 0 4px 2px; scrollbar-width: none; }
 .note-sugg::-webkit-scrollbar { display: none; }
 .note-sugg button { flex: none; padding: 7px 12px; border-radius: 999px; background: var(--sunk); color: var(--ink); font-size: 13.5px; font-weight: 500; white-space: nowrap; max-width: 75vw; overflow: hidden; text-overflow: ellipsis; }
-.amount-box { border-radius: 20px; transition: background .2s; }
+.amount-box { border-radius: 20px; transition: background .2s; margin-top: 12px; }
 .amount-box:not(.on) { background: var(--sunk); }
 .att.add { color: var(--brand); border: 1.5px dashed color-mix(in srgb, var(--brand) 50%, transparent); box-shadow: none; background: transparent; }
 .att svg { width: 26px; height: 26px; }

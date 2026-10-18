@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { PiBackspaceBold, PiCheckBold, PiTrashBold, PiCalendarBlankBold, PiHashBold, PiArrowDownBold, PiPlusBold, PiPaperclipBold, PiFilePdfDuotone, PiXBold, PiShareNetworkBold, PiBellRingingBold, PiLightningBold } from 'react-icons/pi';
+import { PiBackspaceBold, PiCheckBold, PiTrashBold, PiCalendarBlankBold, PiHashBold, PiArrowDownBold, PiPlusBold, PiPaperclipBold, PiFilePdfDuotone, PiXBold, PiShareNetworkBold, PiBellRingingBold, PiLightningBold, PiLightningFill } from 'react-icons/pi';
 import type { Attachment, Kind, Repeat, Tx, Transfer } from '../lib/types';
 import { getState, setState, useStore } from '../lib/store';
 import { accountsSorted, addDays, evalExpr, today, toBase, uid, rate, parseIso } from '../lib/calc';
@@ -218,8 +218,14 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
     close();
   };
 
+  const scMatch = (s.shortcuts ?? []).find((x) => x.kind === mode && x.categoryId === cat && x.accountId === acc && x.note.trim() === note.trim());
   const saveShortcut = () => {
     if (mode === 'transfer') return;
+    if (scMatch) {
+      setState((st) => ({ ...st, shortcuts: (st.shortcuts ?? []).filter((x) => x.id !== scMatch.id) }));
+      toast(t('shortcutRemoved'));
+      return;
+    }
     if (!cat) return toast(t('chooseCategory'));
     addShortcut({ kind: mode, categoryId: cat, accountId: acc, amount: cents > 0 ? cents : undefined, note: note.trim() });
     toast(t('shortcutSaved'));
@@ -248,8 +254,10 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
       full
       title={tx || transfer ? t('editTransaction') : t('newTransaction')}
       actions={<>
-        {mode !== 'transfer' && (
-          <button className="icon-btn" onClick={saveShortcut} aria-label={t('newShortcut')} title={t('newShortcut')}><PiLightningBold /></button>
+        {mode !== 'transfer' && s.settings.shortcutsOn !== false && (
+          <button className="icon-btn" onClick={saveShortcut} aria-label={t('newShortcut')} title={t('newShortcut')} style={scMatch ? { color: '#FFB020' } : undefined}>
+            {scMatch ? <PiLightningFill /> : <PiLightningBold />}
+          </button>
         )}
         {(tx || transfer) && <button className="icon-btn" style={{ color: 'var(--exp)' }} onClick={remove} aria-label="delete"><PiTrashBold /></button>}
       </>}

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Kind } from '../lib/types';
 import { useStore } from '../lib/store';
 import { useT } from '../i18n';
-import { byCategory, filterTx, lastMonths, Period, periodOf, shiftPeriod, sum, today } from '../lib/calc';
+import { byCategory, filterTx, lastMonths, Period, periodOf, shiftPeriod, sum, today, parseIso, addDays, type Gran } from '../lib/calc';
 import { money, monthLabel } from '../lib/format';
 import { Bubble, Money, Seg, PeriodNav, Empty } from '../components/ui';
 import { Bars, Donut } from '../components/charts';
@@ -125,6 +125,23 @@ function Overview() {
   );
 }
 
+/** Bars for the trend chart: the selected period and the ones before it, in the same unit. */
+function trendPeriods(period: Period, weekStart: 0 | 1): { p: Period; gran: Gran }[] {
+  if (period.gran !== 'custom') {
+    const n = { day: 7, week: 8, month: 6, year: 5 }[period.gran];
+    return Array.from({ length: n }, (_, i) => ({ p: shiftPeriod(period, i - n + 1, weekStart), gran: period.gran }));
+  }
+  const days = Math.round((parseIso(period.end).getTime() - parseIso(period.start).getTime()) / 864e5) + 1;
+  const unit: Gran = days <= 14 ? 'day' : days <= 70 ? 'week' : days <= 1100 ? 'month' : 'year';
+  const out: { p: Period; gran: Gran }[] = [];
+  let p = periodOf(unit, period.start, weekStart);
+  while (p.start <= period.end && out.length < 40) {
+    out.push({ p: { gran: unit, start: p.start < period.start ? period.start : p.start, end: p.end > period.end ? period.end : p.end }, gran: unit });
+    p = unit === 'day' ? periodOf('day', addDays(p.start, 1)) : shiftPeriod(p, 1, weekStart);
+  }
+  return out;
+}
+
 function KindView({ kind }: { kind: Kind }) {
   const s = useStore();
   const { t, locale } = useT();
@@ -142,14 +159,13 @@ function KindView({ kind }: { kind: Kind }) {
   }, [s.txs, s.categories, period, kind]);
 
   const trend = useMemo(() => {
-    const months = lastMonths(6, period.end > today() ? today() : period.end);
     const top = rows.slice(0, 6).map((r) => r.id);
-    return months.map((m) => {
-      const p = periodOf('month', m + '-01');
+    return trendPeriods(period, s.settings.weekStart).map(({ p, gran }) => {
       const by = new Map(byCategory(filterTx(s, p, kind)));
       const other = [...by.entries()].filter(([id]) => !top.includes(id)).reduce((a, [, v]) => a + v, 0);
+      const d = parseIso(p.start);
       return {
-        label: monthLabel(m, locale, 'short', false).replace('.', ''),
+        label: gran === 'month' ? monthLabel(p.start.slice(0, 7), locale, 'short', false).replace('.', '') : gran === 'year' ? p.start.slice(0, 4) : d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' }),
         stacked: true,
         bars: [...top.map((id) => ({ value: by.get(id) ?? 0, color: s.categories.find((c) => c.id === id)?.color ?? '#999' })), { value: other, color: '#C9C4DA' }],
       };
@@ -182,7 +198,7 @@ function KindView({ kind }: { kind: Kind }) {
         <div className="paper flush">
           {rows.map((r) => {
             const pv = prevMap.get(r.id);
-            const ch = pv ? ((r.v - pv) / pv) * 100 : null;
+            const ch = pv && pv >= 1000 && Math.abs((r.v - pv) / pv) <= 9.99 ? ((r.v - pv) / pv) * 100 : null; // skip meaningless jumps from tiny bases
             const pc = (r.v / (total || 1)) * 100;
             return (
               <button key={r.id} className="item" onClick={() => goTx({ cat: r.id, kind, gran: period.gran, start: period.start, end: period.end })}>

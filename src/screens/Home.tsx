@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PiEyeBold, PiEyeSlashBold, PiCaretDownBold, PiCheckBold, PiArrowsClockwiseBold, PiListBulletsBold, PiChartLineUpBold, PiArrowDownLeftBold, PiArrowUpRightBold, PiPiggyBankBold, PiReceiptBold, PiCaretRightBold, PiBellRingingFill } from 'react-icons/pi';
 import type { Kind, Tx } from '../lib/types';
 import { setState, useBalances, useStore } from '../lib/store';
@@ -8,7 +8,7 @@ import { money, shortDate } from '../lib/format';
 import { Bubble, Empty, Sheet } from '../components/ui';
 import { Donut, PaceChart } from '../components/charts';
 import { PeriodControl } from '../components/Pickers';
-import { navigate, openOverlay, toast } from '../lib/nav';
+import { navigate, openOverlay, toast, setAddKind, getAddKind } from '../lib/nav';
 import { openTxEditor } from '../components/TxEditor';
 import { goTx } from './Transactions';
 import { upcomingBills } from '../lib/reminders';
@@ -21,7 +21,8 @@ export function Home() {
   const base = s.settings.baseCurrency;
   const hide = s.settings.hideBalance;
   const [accId, setAccId] = useState('');
-  const [kind, setKind] = useState<Kind>('expense');
+  const [kind, setKind] = useState<Kind>(() => (getAddKind() === 'income' ? 'income' : 'expense'));
+  useEffect(() => { setAddKind(kind); }, [kind]);
   const [period, setPeriod] = useState<Period>(() => periodOf('month', today(), s.settings.weekStart));
   const [sel, setSel] = useState<string | null>(null);
   const acc = s.accounts.find((a) => a.id === accId);
@@ -79,7 +80,7 @@ export function Home() {
   const balanceV = acc ? bal.get(acc.id) ?? 0 : total;
   const balanceCur = acc ? acc.currency : base;
   const selRow = rows.find((r) => r.id === sel);
-  const monthQ = { gran: 'month', start: month.m.start, end: month.m.end, view: 'group', ...(accId ? { acc: accId } : {}) };
+  const monthQ = { gran: 'month', start: month.m.start, end: month.m.end, ...(accId ? { acc: accId } : {}) };
 
   const pickAccount = () =>
     openOverlay((close) => (
@@ -135,7 +136,7 @@ export function Home() {
             <b>{month.rate === null ? '—' : `${month.rate}%`}</b>
           </button>
         </div>
-        <ShortcutStrip />
+        {s.settings.shortcutsOn !== false && (s.shortcuts?.length ?? 0) > 0 && <ShortcutStrip />}
       </div>
 
       <div className="paper lift">
