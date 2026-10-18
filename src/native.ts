@@ -2,6 +2,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { Keyboard } from '@capacitor/keyboard';
 
 export const isNative = () => Capacitor.isNativePlatform();
 
@@ -92,4 +93,27 @@ export async function readAutoBackup(name: string): Promise<string | null> {
   }
   const r = await Filesystem.readFile({ path: `${BK_DIR}/${name}`, directory: Directory.Data, encoding: Encoding.UTF8 });
   return typeof r.data === 'string' ? r.data : await (r.data as Blob).text();
+}
+
+// ---------- keyboard ----------
+// Keeps the focused field visible above the on-screen keyboard (edge-to-edge WebViews don't always resize).
+export function initKeyboard() {
+  const root = document.documentElement;
+  const reveal = () => {
+    const el = document.activeElement as HTMLElement | null;
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 60);
+  };
+  if (isNative()) {
+    Keyboard.addListener('keyboardWillShow', (info: { keyboardHeight: number }) => {
+      // only pad if the WebView itself did not shrink
+      const shrunk = window.innerHeight < screen.height * 0.75;
+      root.style.setProperty('--kb', shrunk ? '0px' : `${info.keyboardHeight}px`);
+      reveal();
+    });
+    Keyboard.addListener('keyboardDidShow', () => reveal());
+    Keyboard.addListener('keyboardWillHide', () => root.style.setProperty('--kb', '0px'));
+  } else if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', reveal);
+  }
+  document.addEventListener('focusin', () => setTimeout(reveal, 300));
 }

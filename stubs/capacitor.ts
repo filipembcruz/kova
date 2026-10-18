@@ -14,3 +14,4 @@ export const StatusBar = { setStyle: async (_: unknown) => {}, setBackgroundColo
 export const Style = { Dark: 'DARK', Light: 'LIGHT' } as const;
 export const Haptics = { impact: async (_: unknown) => {} };
 export const ImpactStyle = { Light: 'LIGHT' } as const;
+export const Keyboard = { addListener: (_: string, __: (i: { keyboardHeight: number }) => void) => ({ remove: () => {} }) };
