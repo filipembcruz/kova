@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { PiUserDuotone, PiTranslateDuotone, PiPaletteDuotone, PiCurrencyCircleDollarDuotone, PiArrowsClockwiseBold, PiEyeSlashDuotone, PiCalendarDuotone, PiDownloadSimpleDuotone, PiUploadSimpleDuotone, PiFileCsvDuotone, PiTrashDuotone, PiHeartDuotone, PiCaretRightBold, PiTagDuotone, PiSwapDuotone, PiCloudCheckDuotone, PiHashDuotone, PiReceiptDuotone, PiGoogleDriveLogoDuotone, PiClockCounterClockwiseDuotone, PiVibrateDuotone, PiChatTextDuotone, PiMagnifyingGlassBold } from 'react-icons/pi';
+import { PiUserDuotone, PiTranslateDuotone, PiPaletteDuotone, PiCurrencyCircleDollarDuotone, PiArrowsClockwiseBold, PiEyeSlashDuotone, PiCalendarDuotone, PiDownloadSimpleDuotone, PiUploadSimpleDuotone, PiFileCsvDuotone, PiTrashDuotone, PiHeartDuotone, PiCaretRightBold, PiTagDuotone, PiSwapDuotone, PiCloudCheckDuotone, PiHashDuotone, PiReceiptDuotone, PiGoogleDriveLogoDuotone, PiClockCounterClockwiseDuotone, PiVibrateDuotone, PiChatTextDuotone, PiMagnifyingGlassBold, PiEnvelopeSimpleDuotone } from 'react-icons/pi';
 import type { State } from '../lib/types';
 import { getState, replaceState, setState, useStore, backupNow } from '../lib/store';
 import { useT } from '../i18n';
@@ -7,7 +7,7 @@ import { CURRENCIES, initialState, detectLang } from '../lib/defaults';
 import { Switch, Seg, confirmDialog, Sheet } from '../components/ui';
 import { navigate, openOverlay, toast, closeAllOverlays } from '../lib/nav';
 import { importMmBackup } from '../lib/importer';
-import { pickFile, saveTextFile, listAutoBackups, readAutoBackup } from '../native';
+import { pickFile, saveTextFile, listAutoBackups, readAutoBackup, type BackupEntry } from '../native';
 import { today, fold } from '../lib/calc';
 
 declare const __APP_VERSION__: string;
@@ -41,28 +41,40 @@ export async function updateRates(failMsg?: string) {
   return false;
 }
 
-export async function exportBackupFile(t: (k: any) => string) {
+export async function exportBackupFile(t: (k: any, v?: Record<string, string>) => string, email = false) {
   try {
     toast(t('backingUp'));
     const { buildBackup } = await import('../lib/backup');
-    await saveTextFile(`kova-backup-${today()}.json`, await buildBackup(), 'application/json', t('exportBackup'));
+    const json = await buildBackup();
+    if (email) await saveTextFile(`kova-backup-${today()}.json`, json, 'application/json', `${t('emailSubject')} ${today()}`, t('emailBody', { d: today() }));
+    else await saveTextFile(`kova-backup-${today()}.json`, json, 'application/json', t('exportBackup'));
   } catch {
     toast(t('backupFail'));
   }
 }
 
-export async function restoreFromFile(t: (k: any) => string, ask = true) {
+export function restoreError(t: (k: any) => string, e: unknown) {
+  const m = e instanceof Error ? e.message : '';
+  toast(m === 'EMPTY' ? t('errEmpty') : m === 'BROKEN' ? t('errBroken') : m === 'NOT_KOVA' ? t('errNotKova') : t('importFail'));
+}
+
+export async function applyBackupText(t: (k: any, v?: Record<string, string>) => string, text: string) {
+  const { restoreBackup } = await import('../lib/backup');
+  const r = await restoreBackup(text);
+  await closeAllOverlays();
+  navigate('/', true);
+  toast(t('restoredN', { t: String(r.txs), a: String(r.accounts) }));
+}
+
+export async function restoreFromFile(t: (k: any, v?: Record<string, string>) => string, ask = true) {
   const f = await pickFile('*/*');
   if (!f) return;
   try {
     const text = await f.text();
     if (ask && !(await confirmDialog(t('confirmImport'), t('restoreBackup'), t('cancel'), false))) return;
-    const { restoreBackup } = await import('../lib/backup');
-    await restoreBackup(text);
-    toast(t('imported'));
-    navigate('/', true);
-  } catch {
-    toast(t('importFail'));
+    await applyBackupText(t, text);
+  } catch (e) {
+    restoreError(t, e);
   }
 }
 
@@ -260,7 +272,11 @@ export function Settings() {
           <Ico><PiGoogleDriveLogoDuotone /></Ico>
           <div className="grow"><div className="t">{t('saveToDrive')}</div><div className="s">{t('saveToDriveD')}</div></div>
         </button>
-        <button className="setting" onClick={() => openOverlay((close) => <AutoBackups close={close} />)}>
+        <button className="setting" onClick={() => exportBackupFile(t, true)}>
+          <Ico><PiEnvelopeSimpleDuotone /></Ico>
+          <div className="grow"><div className="t">{t('emailBackup')}</div><div className="s">{t('emailBackupD')}</div></div>
+        </button>
+        <button className="setting" onClick={() => openOverlay(() => <AutoBackups />)}>
           <Ico><PiClockCounterClockwiseDuotone /></Ico>
           <div className="grow"><div className="t">{t('restoreAuto')}</div></div>
           <PiCaretRightBold className="muted" />
@@ -410,20 +426,17 @@ function TagEdit({ tag, close }: { tag: string; close: () => void }) {
   );
 }
 
-function AutoBackups({ close }: { close: () => void }) {
+function AutoBackups() {
   const { t, locale } = useT();
-  const [list, setList] = useState<string[] | null>(null);
+  const [list, setList] = useState<BackupEntry[] | null>(null);
   useEffect(() => { listAutoBackups().then(setList); }, []);
-  const restore = async (name: string) => {
+  const restore = async (e: BackupEntry) => {
     if (!(await confirmDialog(t('confirmImport'), t('restoreBackup'), t('cancel'), false))) return;
     try {
-      const txt = await readAutoBackup(name);
-      const { restoreBackup } = await import('../lib/backup');
-      await restoreBackup(txt ?? '');
-      toast(t('imported'));
-      close();
-    } catch {
-      toast(t('importFail'));
+      toast(t('importing'));
+      await applyBackupText(t, (await readAutoBackup(e)) ?? '');
+    } catch (err) {
+      restoreError(t, err);
     }
   };
   return (
@@ -431,12 +444,15 @@ function AutoBackups({ close }: { close: () => void }) {
       <div className="sheet-b">
         {list && list.length === 0 && <div className="empty">{t('noBackups')}</div>}
         <div className="paper flush">
-          {(list ?? []).map((n) => {
-            const d = n.match(/(\d{4}-\d{2}-\d{2})/)?.[1];
+          {(list ?? []).map((e) => {
+            const d = e.mtime ? new Date(e.mtime) : e.name.match(/(\d{4}-\d{2}-\d{2})/) ? new Date(e.name.match(/(\d{4}-\d{2}-\d{2})/)![1] + 'T12:00') : null;
             return (
-              <button key={n} className="setting" onClick={() => restore(n)}>
+              <button key={e.where + e.path} className="setting" onClick={() => restore(e)}>
                 <Ico><PiClockCounterClockwiseDuotone /></Ico>
-                <div className="grow"><div className="t">{d ? new Date(d + 'T12:00').toLocaleDateString(locale, { dateStyle: 'full' }) : n}</div></div>
+                <div className="grow">
+                  <div className="t">{d ? d.toLocaleString(locale, e.mtime ? { dateStyle: 'medium', timeStyle: 'short' } : { dateStyle: 'full' }) : e.name}</div>
+                  <div className="s">{e.where === 'app' ? t('inApp') : t('inDocs')}{e.size ? ` · ${(e.size / 1048576).toFixed(1)} MB` : ''}</div>
+                </div>
               </button>
             );
           })}

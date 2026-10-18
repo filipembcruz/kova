@@ -81,6 +81,10 @@ const en = {
   seeTransactions: 'See transactions', clearNote: 'Remove note', backingUp: 'Backing up…', backupFail: 'Could not save the backup', open: 'Open', share: 'Share',
   openFail: 'No app on the phone can open this file. Use Share instead.', crashTitle: 'Kova closed unexpectedly', crashText: 'This is what happened. You can copy it and send it to the developer.', copy: 'Copy', copied: 'Copied',
   editNotes: 'Edit', fileSize: 'Size',
+  emailBackup: 'Send backup by email', emailBackupD: 'Opens the share menu: choose Gmail or another email app', emailSubject: 'Kova backup',
+  emailBody: 'Kova backup from {d}. To restore: Kova → Settings → Restore backup and pick this file.',
+  restoredN: 'Restored: {t} transactions · {a} accounts', errEmpty: 'The file is empty', errBroken: 'The file is incomplete or damaged', errNotKova: 'This is not a Kova backup (for the other app use "Import from another app")',
+  inApp: 'In the app', inDocs: 'Documents/Kova (survives reinstall)',
 };
 
 type Dict = typeof en;
@@ -165,6 +169,10 @@ const pt: Dict = {
   seeTransactions: 'Ver transações', clearNote: 'Remover comentário', backingUp: 'Fazendo backup…', backupFail: 'Não foi possível salvar o backup', open: 'Abrir', share: 'Compartilhar',
   openFail: 'Nenhum app do celular abre este arquivo. Use Compartilhar.', crashTitle: 'O Kova fechou inesperadamente', crashText: 'Foi isto que aconteceu. Você pode copiar e enviar para o desenvolvedor.', copy: 'Copiar', copied: 'Copiado',
   editNotes: 'Editar', fileSize: 'Tamanho',
+  emailBackup: 'Enviar backup por e-mail', emailBackupD: 'Abre o menu de compartilhar: escolha o Gmail ou outro app de e-mail', emailSubject: 'Backup do Kova',
+  emailBody: 'Backup do Kova de {d}. Para restaurar: Kova → Ajustes → Restaurar backup e escolha este arquivo.',
+  restoredN: 'Restaurado: {t} transações · {a} contas', errEmpty: 'O arquivo está vazio', errBroken: 'O arquivo está incompleto ou corrompido', errNotKova: 'Este não é um backup do Kova (para o outro app use "Importar de outro app")',
+  inApp: 'No app', inDocs: 'Documentos/Kova (sobrevive à reinstalação)',
 };
 
 export type TKey = keyof Dict;

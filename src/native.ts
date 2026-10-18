@@ -61,11 +61,11 @@ async function readTextFile(path: string, directory: Directory): Promise<string>
 
 const safeName = (n: string) => n.replace(/[^\w.\-]+/g, '_').slice(-80) || 'file';
 
-export async function saveTextFile(name: string, content: string, mime: string, title: string) {
+export async function saveTextFile(name: string, content: string, mime: string, title: string, text?: string) {
   if (isNative()) {
     const uri = await writeTextChunked(`share/${safeName(name)}`, Directory.Cache, content);
     try {
-      await Share.share({ title, files: [uri], dialogTitle: title });
+      await Share.share({ title, text, files: [uri], dialogTitle: title });
     } catch { /* user closed the share sheet */ }
     return;
   }
@@ -161,23 +161,35 @@ export async function writeAutoBackup(json: string, day: string): Promise<boolea
   return true;
 }
 
-export async function listAutoBackups(): Promise<string[]> {
+export interface BackupEntry { name: string; path: string; where: 'app' | 'docs'; size?: number; mtime?: number }
+
+/** Automatic backups: the app's own copies plus the ones in Documents/Kova (those survive a reinstall). */
+export async function listAutoBackups(): Promise<BackupEntry[]> {
   if (!isNative()) {
-    try { return localStorage.getItem('kova-autobackup') ? ['kova-latest.json'] : []; } catch { return []; }
+    try { return localStorage.getItem('kova-autobackup') ? [{ name: 'kova-latest.json', path: '', where: 'app' }] : []; } catch { return []; }
   }
-  try {
-    const list = await Filesystem.readdir({ path: BK_DIR, directory: Directory.Data });
-    return list.files.map((f: any) => (typeof f === 'string' ? f : f.name)).filter((n: string) => n.startsWith('kova-') && n.endsWith('.json')).sort().reverse();
-  } catch {
-    return [];
-  }
+  const out: BackupEntry[] = [];
+  const scan = async (dir: string, directory: Directory, where: BackupEntry['where']) => {
+    try {
+      const list = await Filesystem.readdir({ path: dir, directory });
+      for (const f of list.files as any[]) {
+        const name = typeof f === 'string' ? f : f.name;
+        if (!/^kova-.*\.json$/.test(name)) continue;
+        out.push({ name, path: `${dir}/${name}`, where, size: f.size, mtime: Number(f.mtime) || undefined });
+      }
+    } catch { /* folder missing */ }
+  };
+  await scan(BK_DIR, Directory.Data, 'app');
+  await scan('Kova', Directory.Documents, 'docs');
+  const key = (e: BackupEntry) => e.mtime ?? Date.parse(e.name.match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? '') ?? 0;
+  return out.sort((a, b) => key(b) - key(a));
 }
 
-export async function readAutoBackup(name: string): Promise<string | null> {
+export async function readAutoBackup(e: BackupEntry): Promise<string | null> {
   if (!isNative()) {
     try { return localStorage.getItem('kova-autobackup'); } catch { return null; }
   }
-  return readTextFile(`${BK_DIR}/${name}`, Directory.Data);
+  return readTextFile(e.path, e.where === 'app' ? Directory.Data : Directory.Documents);
 }
 
 // ---------- keyboard ----------

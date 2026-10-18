@@ -15,11 +15,14 @@ export async function buildBackup(state: State = getState()) {
 }
 
 export async function restoreBackup(text: string) {
-  const j = JSON.parse(text);
+  if (!text || !text.trim()) throw new Error('EMPTY');
+  let j: any;
+  try { j = JSON.parse(text); } catch { throw new Error('BROKEN'); }
   const state: State = j.state ?? j;
-  if (!state || !Array.isArray(state.accounts) || !Array.isArray(state.txs)) throw new Error('INVALID');
+  if (!state || !Array.isArray(state.accounts) || !Array.isArray(state.txs)) throw new Error('NOT_KOVA');
   for (const [id, f] of Object.entries((j.files ?? {}) as Record<string, { type: string; b64: string }>)) {
     await putFile(id, base64ToBlob(f.b64, f.type));
   }
   replaceState({ ...state, settings: { ...state.settings, onboarded: true } });
+  return { txs: state.txs.length, accounts: state.accounts.length, exported: j.exported as string | undefined };
 }

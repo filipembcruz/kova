@@ -139,7 +139,7 @@ function Welcome() {
           <rect x="175" y="92" width="44" height="8" rx="4" fill="rgba(255,255,255,.45)" />
           <rect x="175" y="116" width="54" height="8" rx="4" fill="rgba(255,255,255,.45)" />
           <rect x="70" y="196" width="160" height="34" rx="17" fill="rgba(255,255,255,.95)" />
-          <text x="150" y="219" textAnchor="middle" fontSize="15" fontWeight="700" fill="#5233ec" fontFamily="Inter, sans-serif">R$ 475.745,32</text>
+          <text x="150" y="219" textAnchor="middle" fontSize="15" fontWeight="700" fill="#5233ec" fontFamily="Inter, sans-serif">$ 12,480.00</text>
         </svg>
       </div>
       <img className="logo" src="logo.svg" alt="Kova" />
