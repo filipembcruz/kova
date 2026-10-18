@@ -26,6 +26,7 @@ export function defaultSettings(): Settings {
     hideBalance: false,
     weekStart: 1,
     onboarded: false,
+    autoBackup: true,
   };
 }
 

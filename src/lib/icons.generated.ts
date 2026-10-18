@@ -182,6 +182,11 @@ import {
   PiSmileyDuotone,
   PiQuestionDuotone,
   PiDotsThreeCircleDuotone,
+  PiWarningDuotone,
+  PiInfoDuotone,
+  PiRepeatDuotone,
+  PiTargetDuotone,
+  PiMagnifyingGlassDuotone,
 } from 'react-icons/pi';
 import type { IconType } from 'react-icons';
 
@@ -368,6 +373,11 @@ export const ICONS: Record<string, IconType> = {
   'smiley': PiSmileyDuotone,
   'question': PiQuestionDuotone,
   'dots-three-circle': PiDotsThreeCircleDuotone,
+  'warning': PiWarningDuotone,
+  'info': PiInfoDuotone,
+  'repeat': PiRepeatDuotone,
+  'target': PiTargetDuotone,
+  'magnifying-glass': PiMagnifyingGlassDuotone,
 };
 
 export const ICON_GROUPS: Record<string, string[]> = {
@@ -573,6 +583,12 @@ export const ICON_GROUPS: Record<string, string[]> = {
     "star",
     "smiley",
     "question",
-    "dots-three-circle"
+    "dots-three-circle",
+    "warning",
+    "info",
+    "repeat",
+    "target",
+    "lightning",
+    "magnifying-glass"
   ]
 };

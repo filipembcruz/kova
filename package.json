@@ -1,8 +1,8 @@
 {
   "name": "kova",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "Kova — a beautiful, private, offline personal finance app for Android (English & Português).",
+  "description": "Kova \u2014 a beautiful, private, offline personal finance app for Android (English & Portugu\u00eas).",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -17,7 +17,6 @@
     "@capacitor/filesystem": "^7.1.0",
     "@capacitor/haptics": "^7.0.0",
     "@capacitor/share": "^7.0.0",
-    "@capacitor/status-bar": "^7.0.0",
     "jszip": "^3.10.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

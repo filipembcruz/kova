@@ -1,7 +1,6 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
-import { StatusBar, Style } from '@capacitor/status-bar';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 
 export const isNative = () => Capacitor.isNativePlatform();
@@ -38,15 +37,59 @@ export function pickFile(accept = '*/*'): Promise<File | null> {
   });
 }
 
+const SystemColor = registerPlugin<{ set(o: { color: string; dark: boolean }): Promise<void> }>('SystemColor');
+
+/** Matches status bar + navigation bar to the app background (native plugin in android-src/). */
 export async function setStatusBar(dark: boolean, color: string) {
   if (!isNative()) return;
   try {
-    await StatusBar.setStyle({ style: dark ? Style.Dark : Style.Light });
-    await StatusBar.setBackgroundColor({ color });
-  } catch { /* not supported on this Android version */ }
+    await SystemColor.set({ color, dark });
+  } catch { /* plugin missing */ }
 }
 
 export function tap() {
   if (!isNative()) return;
   Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
+}
+
+// ---------- automatic backups ----------
+// Snapshots go to the app's private files dir, which Android's own backup
+// (Google Drive) includes, so they survive a phone change / reinstall.
+const BK_DIR = 'backups';
+const KEEP = 10;
+
+export async function writeAutoBackup(json: string, day: string): Promise<boolean> {
+  if (!isNative()) {
+    try { localStorage.setItem('kova-autobackup', json); } catch { /* ignore */ }
+    return true;
+  }
+  await Filesystem.writeFile({ path: `${BK_DIR}/kova-${day}.json`, data: json, directory: Directory.Data, encoding: Encoding.UTF8, recursive: true });
+  try {
+    const list = await Filesystem.readdir({ path: BK_DIR, directory: Directory.Data });
+    const names = list.files.map((f: any) => (typeof f === 'string' ? f : f.name)).filter((n: string) => n.startsWith('kova-')).sort();
+    for (const old of names.slice(0, Math.max(0, names.length - KEEP))) {
+      await Filesystem.deleteFile({ path: `${BK_DIR}/${old}`, directory: Directory.Data });
+    }
+  } catch { /* ignore */ }
+  return true;
+}
+
+export async function listAutoBackups(): Promise<string[]> {
+  if (!isNative()) {
+    try { return localStorage.getItem('kova-autobackup') ? ['kova-latest.json'] : []; } catch { return []; }
+  }
+  try {
+    const list = await Filesystem.readdir({ path: BK_DIR, directory: Directory.Data });
+    return list.files.map((f: any) => (typeof f === 'string' ? f : f.name)).filter((n: string) => n.startsWith('kova-')).sort().reverse();
+  } catch {
+    return [];
+  }
+}
+
+export async function readAutoBackup(name: string): Promise<string | null> {
+  if (!isNative()) {
+    try { return localStorage.getItem('kova-autobackup'); } catch { return null; }
+  }
+  const r = await Filesystem.readFile({ path: `${BK_DIR}/${name}`, directory: Directory.Data, encoding: Encoding.UTF8 });
+  return typeof r.data === 'string' ? r.data : await (r.data as Blob).text();
 }

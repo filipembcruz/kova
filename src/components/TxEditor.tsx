@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { PiBackspaceBold, PiCheckBold, PiTrashBold, PiCalendarBlankBold, PiHashBold, PiArrowDownBold, PiPlusBold } from 'react-icons/pi';
-import type { Kind, Tx, Transfer } from '../lib/types';
+import type { Kind, Repeat, Tx, Transfer } from '../lib/types';
 import { getState, setState, useStore } from '../lib/store';
 import { accountsSorted, addDays, evalExpr, today, toBase, uid, rate } from '../lib/calc';
 import { useT } from '../i18n';
@@ -32,6 +32,7 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, close }: { tx?: T
   const [date, setDate] = useState(tx?.date ?? transfer?.date ?? today());
   const [note, setNote] = useState(tx?.note ?? transfer?.note ?? '');
   const [tags, setTags] = useState<string[]>(tx?.tags ?? []);
+  const [rep, setRep] = useState<Repeat | ''>(tx?.repeat ?? '');
   const [tagInput, setTagInput] = useState('');
   const [typing, setTyping] = useState(false);
   const [editingTo, setEditingTo] = useState(false);
@@ -100,8 +101,18 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, close }: { tx?: T
         id: tx?.id ?? uid(), kind: mode, accountId: acc, categoryId: cat, amount: cents, base,
         date, note: note.trim(), tags, created: tx?.created ?? new Date().toISOString(),
       };
+      if (rep) { nt.repeat = rep; nt.series = tx?.series ?? uid(); }
+      else if (tx?.series) nt.series = tx.series;
+      const stopSeries = !rep && tx?.repeat && tx.series;
       setState((st) => {
         let txs = tx ? st.txs.map((x) => (x.id === nt.id ? nt : x)) : [nt, ...st.txs];
+        if (stopSeries) {
+          const now = today();
+          txs = txs.filter((x) => x.id === nt.id || x.series !== tx!.series || x.date <= now).map((x) => (x.series === tx!.series ? { ...x, repeat: undefined } : x));
+        } else if (rep && tx?.series) {
+          // newer planned occurrences follow the edited one
+          txs = txs.filter((x) => x.id === nt.id || x.series !== tx.series || x.date <= nt.date || x.date <= today());
+        }
         txs = [...txs].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.created < b.created ? 1 : -1));
         return { ...st, txs, transfers: transfer ? st.transfers.filter((x) => x.id !== transfer.id) : st.transfers };
       });
@@ -112,11 +123,14 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, close }: { tx?: T
 
   const remove = async () => {
     if (!(await confirmDialog(t('confirmDelete'), t('delete'), t('cancel')))) return;
-    setState((st) => ({
-      ...st,
-      txs: tx ? st.txs.filter((x) => x.id !== tx.id) : st.txs,
-      transfers: transfer ? st.transfers.filter((x) => x.id !== transfer.id) : st.transfers,
-    }));
+    setState((st) => {
+      let txs = tx ? st.txs.filter((x) => x.id !== tx.id) : st.txs;
+      // deleting the latest occurrence of a recurring item stops the series
+      if (tx?.series && !txs.some((x) => x.series === tx.series && x.date >= tx.date)) {
+        txs = txs.map((x) => (x.series === tx.series ? { ...x, repeat: undefined } : x));
+      }
+      return { ...st, txs, transfers: transfer ? st.transfers.filter((x) => x.id !== transfer.id) : st.transfers };
+    });
     toast(t('deleted'));
     close();
   };
@@ -136,7 +150,7 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, close }: { tx?: T
       full
       title={tx || transfer ? t('editTransaction') : t('newTransaction')}
       actions={(tx || transfer) && (
-        <button className="round-btn" style={{ width: 40, height: 40, boxShadow: 'none', background: 'var(--red-soft)', color: 'var(--red)' }} onClick={remove} aria-label="delete">
+        <button className="icon-btn" style={{ color: 'var(--exp)' }} onClick={remove} aria-label="delete">
           <PiTrashBold />
         </button>
       )}
@@ -155,7 +169,7 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, close }: { tx?: T
 
         <div className="amount-box" onClick={() => { setTyping(false); setEditingTo(false); (document.activeElement as HTMLElement)?.blur?.(); }}>
           <div className="cur">{editingTo ? `${t('received')} · ${toAccount?.currency}` : `${t('amount')} · ${cur}`}</div>
-          <div className="val" style={{ color: mode === 'income' ? 'var(--green)' : mode === 'expense' ? 'var(--ink)' : 'var(--blue)' }}>{shown}</div>
+          <div className="val" style={{ color: mode === 'income' ? 'var(--inc)' : mode === 'expense' ? 'var(--ink)' : 'var(--blue)' }}>{shown}</div>
           <div className="expr">{/[+\-×÷]/.test(display) ? display : ' '}</div>
         </div>
 
@@ -212,6 +226,22 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, close }: { tx?: T
           </label>
         </div>
 
+        {date > today() && (
+          <div className="row" style={{ margin: '-4px 4px 12px', gap: 8 }}>
+            <span className="tag plan">{t('planned')}</span>
+            <span className="small muted grow">{t('plannedHint')}</span>
+            {tx && <button className="mini-btn" onClick={() => setDate(today())}>{t('confirmNow')}</button>}
+          </div>
+        )}
+        {mode !== 'transfer' && (
+          <div className="pills" style={{ marginBottom: 12 }}>
+            {(['', 'monthly', 'weekly', 'yearly'] as const).map((r) => (
+              <button key={r || 'none'} className={'pill text' + (rep === r ? ' on' : '')} onClick={() => setRep(r)}>
+                {r === '' ? t('noRepeat') : t(r)}
+              </button>
+            ))}
+          </div>
+        )}
         <label className="field">
           <span>{t('note')}</span>
           <input value={note} placeholder={t('notePh')} onFocus={() => setTyping(true)} onBlur={() => setTimeout(() => setTyping(false), 120)} onChange={(e) => setNote(e.target.value)} />

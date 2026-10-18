@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { PiHouseDuotone, PiWalletDuotone, PiChartPieSliceDuotone, PiSquaresFourDuotone, PiGearSixDuotone, PiPlusBold, PiDownloadSimpleBold, PiSparkleBold } from 'react-icons/pi';
+import { PiHouse, PiHouseFill, PiWallet, PiWalletFill, PiChartPieSlice, PiChartPieSliceFill, PiSquaresFour, PiSquaresFourFill, PiGearSix, PiGearSixFill, PiPlusBold, PiDownloadSimpleBold, PiSparkleBold } from 'react-icons/pi';
 import { isLoaded, loadState, setState, useStore } from './lib/store';
 import { useT } from './i18n';
 import { goTab, useRoute } from './lib/nav';
@@ -25,7 +25,7 @@ function useTheme() {
   const dark = s.settings.theme === 'dark' || (s.settings.theme === 'system' && sysDark);
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-    const bg = dark ? '#0e0c16' : '#f4f1fb';
+    const bg = dark ? '#0d0e14' : '#eef0f5';
     document.querySelector('meta[name=theme-color]')?.setAttribute('content', bg);
     setStatusBar(dark, bg);
   }, [dark]);
@@ -70,11 +70,11 @@ function Main() {
   else screen = <Home />;
 
   const tabs = [
-    { p: '/', icon: PiHouseDuotone, l: t('home') },
-    { p: '/accounts', icon: PiWalletDuotone, l: t('accounts') },
-    { p: '/charts', icon: PiChartPieSliceDuotone, l: t('charts') },
-    { p: '/categories', icon: PiSquaresFourDuotone, l: t('categories') },
-    { p: '/settings', icon: PiGearSixDuotone, l: t('settings') },
+    { p: '/', icon: PiHouse, on: PiHouseFill, l: t('home') },
+    { p: '/accounts', icon: PiWallet, on: PiWalletFill, l: t('accounts') },
+    { p: '/charts', icon: PiChartPieSlice, on: PiChartPieSliceFill, l: t('charts') },
+    { p: '/categories', icon: PiSquaresFour, on: PiSquaresFourFill, l: t('categories') },
+    { p: '/settings', icon: PiGearSix, on: PiGearSixFill, l: t('settings') },
   ];
   const showFab = path === '/' || path === '/accounts' || path === '/tx';
   const accFromRoute = path === '/tx' ? r.query.get('acc') ?? undefined : undefined;
@@ -83,18 +83,23 @@ function Main() {
     <>
       <div className={'app' + (isTab ? '' : ' sub')}>{screen}</div>
       {showFab && (
-        <button className="fab" style={!isTab ? { bottom: 'calc(24px + var(--safe-bottom))' } : undefined} onClick={() => openTxEditor({ accountId: accFromRoute })} aria-label="add">
+        <button className="fab" style={!isTab ? { bottom: 'calc(20px + var(--safe-bottom))' } : undefined} onClick={() => openTxEditor({ accountId: accFromRoute })} aria-label="add">
           <PiPlusBold />
         </button>
       )}
       {isTab && (
         <nav className="nav">
-          {tabs.map((x) => (
-            <button key={x.p} className={path === x.p ? 'on' : ''} onClick={() => goTab(x.p)}>
-              <x.icon />
-              <span>{x.l}</span>
-            </button>
-          ))}
+          <div className="in">
+            {tabs.map((x) => {
+              const I = path === x.p ? x.on : x.icon;
+              return (
+                <button key={x.p} className={path === x.p ? 'on' : ''} onClick={() => goTab(x.p)}>
+                  <I />
+                  <span>{x.l}</span>
+                </button>
+              );
+            })}
+          </div>
         </nav>
       )}
     </>

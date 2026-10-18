@@ -7,12 +7,13 @@ import { money, monthLabel } from '../lib/format';
 import { Bubble, Money, Seg, PeriodNav, Empty } from '../components/ui';
 import { Bars, Donut } from '../components/charts';
 import { GranPicker, goTx, periodLabel } from './Transactions';
+import { Reports } from './Reports';
 
-type Tab = 'overview' | Kind;
+type Tab = 'reports' | 'overview' | Kind;
 
 export function Charts() {
   const { t } = useT();
-  const [tab, setTab] = useState<Tab>('overview');
+  const [tab, setTab] = useState<Tab>('reports');
   return (
     <>
       <div className="topbar"><h1>{t('charts')}</h1></div>
@@ -21,13 +22,14 @@ export function Charts() {
         value={tab}
         onChange={setTab}
         options={[
+          { v: 'reports', label: t('reports') },
           { v: 'overview', label: t('overview') },
           { v: 'expense', label: t('expenses'), cls: 'expense' },
           { v: 'income', label: t('income'), cls: 'income' },
         ]}
       />
       <div style={{ height: 14 }} />
-      {tab === 'overview' ? <Overview /> : <KindView kind={tab} key={tab} />}
+      {tab === 'reports' ? <Reports /> : tab === 'overview' ? <Overview /> : <KindView kind={tab} key={tab} />}
     </>
   );
 }
@@ -62,11 +64,11 @@ function Overview() {
   const sel = data[pick ?? data.length - 1];
   const net = sel.inc - sel.exp;
   const totals = data.reduce((a, d) => ({ inc: a.inc + d.inc, exp: a.exp + d.exp }), { inc: 0, exp: 0 });
-  const fmt = (v: number) => money(v, base, locale, { compact: true, noCents: true });
+  const fmt = (v: number) => money(v, base, locale, { noCents: true });
 
   return (
     <>
-      <div className="card">
+      <div className="paper">
         <Seg<'month' | 'year'> value={mode} onChange={(m) => { setMode(m); setOffset(0); setPick(undefined); }} options={[{ v: 'month', label: t('byMonth') }, { v: 'year', label: t('byYear') }]} />
         <PeriodNav
           label={`${data[0].label} – ${data[data.length - 1].label}${mode === 'month' ? ' ' + data[data.length - 1].key.slice(0, 4) : ''}`}
@@ -78,7 +80,7 @@ function Overview() {
           height={230}
           picked={pick ?? data.length - 1}
           onPick={setPick}
-          fmt={s.settings.hideBalance ? undefined : fmt}
+          fmt={fmt}
           groups={data.map((d) => ({
             label: d.label,
             bars: [
@@ -95,15 +97,12 @@ function Overview() {
         </div>
       </div>
 
-      <div className="card">
+      <div className="paper">
         <h3>{mode === 'month' ? monthLabel(sel.key, locale) : sel.key}</h3>
-        <div className="stat-row">
-          <div className="stat"><span>{t('income')}</span><b className="pos"><Money cents={sel.inc} compact /></b></div>
-          <div className="stat"><span>{t('expenses')}</span><b><Money cents={sel.exp} compact /></b></div>
-          <div className="stat" style={{ background: net >= 0 ? 'var(--lilac)' : 'var(--red-soft)' }}>
-            <span>{net >= 0 ? t('profit') : t('loss')}</span>
-            <b style={{ color: net >= 0 ? 'var(--lilac-ink)' : 'var(--red)' }}><Money cents={net} compact sign /></b>
-          </div>
+        <div className="stats">
+          <div className="st"><span>{t('income')}</span><b className="pos"><Money cents={sel.inc} /></b></div>
+          <div className="st"><span>{t('expenses')}</span><b><Money cents={sel.exp} /></b></div>
+          <div className="st"><span>{net >= 0 ? t('profit') : t('loss')}</span><b style={{ color: net >= 0 ? 'var(--inc)' : 'var(--exp)' }}><Money cents={net} sign /></b></div>
         </div>
         <div className="row" style={{ marginTop: 14 }}>
           <span className="small muted grow">{t('savingsRate')}</span>
@@ -114,12 +113,12 @@ function Overview() {
         </div>
       </div>
 
-      <div className="card">
+      <div className="paper">
         <h3>{t('total')} · {data[0].label} – {data[data.length - 1].label}</h3>
-        <div className="stat-row">
-          <div className="stat"><span>{t('income')}</span><b className="pos"><Money cents={totals.inc} compact /></b></div>
-          <div className="stat"><span>{t('expenses')}</span><b><Money cents={totals.exp} compact /></b></div>
-          <div className="stat"><span>{t('net')}</span><b><Money cents={totals.inc - totals.exp} compact sign /></b></div>
+        <div className="stats">
+          <div className="st"><span>{t('income')}</span><b className="pos"><Money cents={totals.inc} /></b></div>
+          <div className="st"><span>{t('expenses')}</span><b><Money cents={totals.exp} /></b></div>
+          <div className="st"><span>{t('net')}</span><b><Money cents={totals.inc - totals.exp} sign /></b></div>
         </div>
       </div>
     </>
@@ -161,9 +160,9 @@ function KindView({ kind }: { kind: Kind }) {
 
   return (
     <>
-      <div className="card">
+      <div className="paper">
         <GranPicker period={period} setPeriod={(p) => { setPeriod(p); setSel(null); }} />
-        <PeriodNav label={periodLabel(period, locale)} onPrev={() => setPeriod(shiftPeriod(period, -1, s.settings.weekStart))} onNext={() => setPeriod(shiftPeriod(period, 1, s.settings.weekStart))} nextDisabled={period.end >= today()} />
+        <PeriodNav label={periodLabel(period, locale)} onPrev={() => setPeriod(shiftPeriod(period, -1, s.settings.weekStart))} onNext={() => setPeriod(shiftPeriod(period, 1, s.settings.weekStart))} />
         {rows.length === 0 ? (
           <Empty title={t('noData')} />
         ) : (
@@ -172,7 +171,7 @@ function KindView({ kind }: { kind: Kind }) {
             <div className="donut-center">
               <div>
                 {selRow?.cat && <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4 }}><Bubble icon={selRow.cat.icon} color={selRow.cat.color} size={30} round /></div>}
-                <b><Money cents={selRow ? selRow.v : total} compact /></b>
+                <b className="num"><Money cents={selRow ? selRow.v : total} /></b>
                 <span>{selRow ? `${selRow.cat?.name} · ${Math.round((selRow.v / total) * 100)}%` : kind === 'expense' ? t('expenses') : t('income')}</span>
               </div>
             </div>
@@ -181,7 +180,7 @@ function KindView({ kind }: { kind: Kind }) {
       </div>
 
       {rows.length > 0 && (
-        <div className="card tight">
+        <div className="paper flush">
           {rows.map((r) => {
             const pv = prevMap.get(r.id);
             const ch = pv ? ((r.v - pv) / pv) * 100 : null;
@@ -213,9 +212,9 @@ function KindView({ kind }: { kind: Kind }) {
         </div>
       )}
 
-      <div className="card">
+      <div className="paper">
         <h3>{t('trend')}</h3>
-        <Bars height={210} groups={trend} fmt={s.settings.hideBalance ? undefined : (v) => money(v, base, locale, { compact: true, noCents: true })} />
+        <Bars height={210} groups={trend} fmt={(v) => money(v, base, locale, { noCents: true })} />
       </div>
     </>
   );

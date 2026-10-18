@@ -1,7 +1,8 @@
 import { useSyncExternalStore, useMemo } from 'react';
 import type { State } from './types';
 import { initialState, detectLang } from './defaults';
-import { balances, totalBalance } from './calc';
+import { balances, totalBalance, ensureRecurring, today } from './calc';
+import { writeAutoBackup } from '../native';
 
 const DB_NAME = 'kova';
 const STORE = 'kv';
@@ -57,6 +58,40 @@ export async function loadState() {
   }
   loaded = true;
   emit();
+  await maintenance();
+}
+
+/** Daily housekeeping: create next occurrences of recurring items and write the automatic backup. */
+export async function maintenance() {
+  const next = ensureRecurring(state);
+  if (next !== state) {
+    state = next;
+    emit();
+    persist();
+  }
+  const day = today();
+  if (state.settings.onboarded && state.settings.autoBackup && (state.settings.lastBackup ?? '').slice(0, 10) !== day) {
+    await backupNow();
+  }
+}
+
+export async function backupNow() {
+  try {
+    const json = JSON.stringify({ app: 'kova', version: 1, exported: new Date().toISOString(), state });
+    await writeAutoBackup(json, today());
+    state = { ...state, settings: { ...state.settings, lastBackup: new Date().toISOString() } };
+    emit();
+    persist();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && loaded) maintenance();
+  });
 }
 
 function safeLocal() {
@@ -82,7 +117,7 @@ export function getState() {
 }
 
 export function setState(fn: (s: State) => State) {
-  state = fn(state);
+  state = ensureRecurring(fn(state));
   emit();
   persist();
 }
@@ -108,8 +143,9 @@ export function useStore(): State {
 
 export function useBalances() {
   const s = useStore();
+  const day = today();
   return useMemo(() => {
     const b = balances(s);
     return { bal: b, total: totalBalance(s, b) };
-  }, [s.accounts, s.txs, s.transfers, s.settings.rates, s.settings.baseCurrency]);
+  }, [s.accounts, s.txs, s.transfers, s.settings.rates, s.settings.baseCurrency, day]);
 }

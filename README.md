@@ -13,12 +13,16 @@
 
 ## ✨ Features
 
-- **Home** — total balance, monthly income/expenses, savings rate, *spending pace* with month-end projection, top categories vs last month, achievements and recent activity.
+- **Home** — account picker, balance (with a privacy switch), expenses/income by category for any day, week, month, year or custom period, and upcoming planned entries.
+- **Insights** — monthly, quarterly and yearly reports: how much you saved, where the money went, biggest expenses, non-essential spending, fixed costs & subscriptions detected automatically, categories above their usual level, budget alerts, net-worth change and month-end projection.
+- **Planned & recurring entries** — add income or expenses with a future date (they only hit the balance on that day), confirm them early with one tap, repeat weekly/monthly/yearly.
 - **Accounts** — unlimited accounts in any currency (BRL, EUR, USD…), balance distribution, transfers between accounts (including cross-currency), archive and reorder.
 - **Charts** — income vs expenses vs savings by month/year, category donut, per-category trends, comparison with the previous period. Day / week / month / year / custom period.
 - **Categories** — 180+ modern icons (Phosphor), 24 colors, optional monthly budgets with progress rings.
 - **Settings** — language (auto / English / Português), light/dark/system theme, hide balances, main currency, exchange rates (manual or online update), backups.
 - **Fast entry** — built-in calculator keypad, tags, notes, today/yesterday shortcuts.
+- **Search** — accent-insensitive search across notes, categories, accounts, tags and amounts, with multi-category filters and sorting by amount.
+- **Automatic backup** — a daily copy kept on the phone and included in Android's backup to Google Drive; one tap to send a backup file to Drive.
 - **Your data stays on your phone.** No account, no ads, no tracking.
 - **Import** — bring your history from a `.mmbackup` file exported by another finance app. Export/restore Kova backups (`.json`) and export CSV.
 
@@ -55,7 +59,7 @@ For convenience the repository ships a **public** keystore (`keystore/kova-relea
 
 ## 🧱 Tech
 
-React 19 + TypeScript, bundled with esbuild, packaged with Capacitor 7. Charts are hand-made SVG; icons from [Phosphor](https://phosphoricons.com) via react-icons; font Poppins (OFL). Backups are parsed by a tiny built-in SQLite reader — no native code.
+React 19 + TypeScript, bundled with esbuild, packaged with Capacitor 7. Charts are hand-made SVG; icons from [Phosphor](https://phosphoricons.com) via react-icons; fonts TeX Gyre Adventor (GUST) and Inter (OFL). A tiny native plugin (`android-src/`) colours the system bars. Backups are parsed by a tiny built-in SQLite reader — no native code.
 
 ```
 src/

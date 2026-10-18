@@ -1,18 +1,20 @@
 import { useState } from 'react';
 import { lighten } from './ui';
 
-export function Donut({ data, size = 230, thick = 30, onSelect, selected }: { data: { id: string; value: number; color: string }[]; size?: number; thick?: number; onSelect?: (id: string | null) => void; selected?: string | null }) {
+export function Donut({ data, onSelect, selected }: { data: { id: string; value: number; color: string }[]; onSelect?: (id: string | null) => void; selected?: string | null }) {
+  const size = 260, thick = 34;
   const total = data.reduce((a, d) => a + d.value, 0) || 1;
-  const r = (size - thick) / 2;
+  const r = (size - thick - 10) / 2;
   const c = 2 * Math.PI * r;
-  const gap = data.length > 1 ? 4 : 0;
+  const gap = data.length > 1 ? 3 : 0;
   let acc = 0;
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--card2)" strokeWidth={thick} />
+    <svg viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }} role="img">
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--sunk)" strokeWidth={thick} />
       {data.map((d) => {
         const len = (d.value / total) * c;
-        const seg = Math.max(len - gap, 0.5);
+        const seg = Math.max(len - gap, 1.2);
+        const on = selected === d.id;
         const el = (
           <circle
             key={d.id}
@@ -21,13 +23,12 @@ export function Donut({ data, size = 230, thick = 30, onSelect, selected }: { da
             r={r}
             fill="none"
             stroke={d.color}
-            strokeWidth={selected === d.id ? thick + 8 : thick}
+            strokeWidth={on ? thick + 10 : thick}
             strokeDasharray={`${seg} ${c - seg}`}
             strokeDashoffset={-acc}
-            strokeLinecap={len > 14 ? 'round' : 'butt'}
-            opacity={selected && selected !== d.id ? 0.35 : 1}
-            style={{ transition: 'all .3s' }}
-            onClick={() => onSelect?.(selected === d.id ? null : d.id)}
+            opacity={selected && !on ? 0.3 : 1}
+            style={{ transition: 'opacity .25s, stroke-width .25s', cursor: 'pointer' }}
+            onClick={() => onSelect?.(on ? null : d.id)}
           />
         );
         acc += len;
@@ -109,7 +110,7 @@ export function Bars({ groups, height = 200, fmt, onPick, picked }: { groups: Ba
                   return (
                     <>
                       <rect x={cx - w / 2} y={y} width={w} height={20} rx={10} fill="var(--ink)" />
-                      <text x={cx} y={y + 14} textAnchor="middle" fontSize="11" fontWeight="700" fill="var(--card)">{txt}</text>
+                      <text x={cx} y={y + 14} textAnchor="middle" fontSize="11" fontWeight="700" fill="var(--paper)">{txt}</text>
                     </>
                   );
                 })()}

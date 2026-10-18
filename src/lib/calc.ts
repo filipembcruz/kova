@@ -1,10 +1,12 @@
 import type { Account, Kind, State, Tx } from './types';
 
-export function balances(s: State): Map<string, number> {
+/** Balances only count transactions up to today: future-dated ones are planned. */
+export function balances(s: State, upTo = today()): Map<string, number> {
   const m = new Map<string, number>();
   for (const a of s.accounts) m.set(a.id, a.initial);
-  for (const t of s.txs) m.set(t.accountId, (m.get(t.accountId) ?? 0) + (t.kind === 'income' ? t.amount : -t.amount));
+  for (const t of s.txs) if (t.date <= upTo) m.set(t.accountId, (m.get(t.accountId) ?? 0) + (t.kind === 'income' ? t.amount : -t.amount));
   for (const t of s.transfers) {
+    if (t.date > upTo) continue;
     m.set(t.from, (m.get(t.from) ?? 0) - t.fromAmount);
     m.set(t.to, (m.get(t.to) ?? 0) + t.toAmount);
   }
@@ -152,3 +154,42 @@ export function evalExpr(expr: string): number | null {
   for (let i = 0; i < ops.length; i++) r = ops[i] === '+' ? r + nums[i + 1] : r - nums[i + 1];
   return Number.isFinite(r) ? Math.round(r * 100) / 100 : null;
 }
+
+export const isPlanned = (date: string) => date > today();
+
+export function addPeriod(date: string, r: 'weekly' | 'monthly' | 'yearly', n = 1) {
+  const d = parseIso(date);
+  if (r === 'weekly') return addDays(date, 7 * n);
+  if (r === 'yearly') return iso(new Date(d.getFullYear() + n, d.getMonth(), Math.min(d.getDate(), new Date(d.getFullYear() + n, d.getMonth() + 1, 0).getDate())));
+  const target = new Date(d.getFullYear(), d.getMonth() + n, 1);
+  const last = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  return iso(new Date(target.getFullYear(), target.getMonth(), Math.min(d.getDate(), last)));
+}
+
+/** Keeps exactly one upcoming (planned) occurrence for every recurring series. */
+export function ensureRecurring(s: State): State {
+  const latest = new Map<string, Tx>();
+  for (const t of s.txs) {
+    if (!t.series) continue;
+    const cur = latest.get(t.series);
+    if (!cur || t.date > cur.date) latest.set(t.series, t);
+  }
+  const add: Tx[] = [];
+  const now = today();
+  for (const t of latest.values()) {
+    if (!t.repeat) continue;
+    let last = t;
+    let guard = 0;
+    while (last.date <= now && guard++ < 400) {
+      const next: Tx = { ...last, id: uid(), date: addPeriod(last.date, t.repeat), created: new Date().toISOString() };
+      add.push(next);
+      last = next;
+    }
+  }
+  if (!add.length) return s;
+  const txs = [...add, ...s.txs].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.created < b.created ? 1 : -1));
+  return { ...s, txs };
+}
+
+/** Lowercase + strip accents, for search. */
+export const fold = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();

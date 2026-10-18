@@ -8,7 +8,7 @@ const groups = {
   transport: ['Car','CarProfile','Taxi','Bus','Train','Airplane','AirplaneTilt','Bicycle','Motorcycle','Scooter','GasPump','ChargingStation','Boat','Sailboat','Anchor','MapPin','Suitcase','SuitcaseRolling','Globe','Compass','Tent','Mountains','Island','Umbrella','Ticket'],
   health: ['Heartbeat','Heart','FirstAidKit','Pill','Syringe','Stethoscope','Tooth','Hospital','Eye','Brain','Barbell','Bicycle','PersonSimpleRun','PersonSimpleSwim','SoccerBall','Basketball','TennisBall','Football','Sneaker','Flower','Leaf','Scissors','Sparkle','Drop'],
   people: ['Baby','BabyCarriage','Student','GraduationCap','Users','UsersThree','User','UserCircle','HandHeart','Dog','Cat','PawPrint','Church','Gift','Confetti','Balloon','Cake','TShirt','Dress','Hoodie','Handbag','Eyeglasses','Watch','Sunglasses'],
-  fun: ['GameController','FilmSlate','FilmStrip','MusicNotes','Headphones','Microphone','Guitar','Book','BookOpen','Books','Newspaper','Camera','Palette','PuzzlePiece','Ticket','MaskHappy','Popcorn','Television','YoutubeLogo','SpotifyLogo','Cloud','Robot','Code','Rocket','Star','Smiley','Question','DotsThreeCircle']
+  fun: ['GameController','FilmSlate','FilmStrip','MusicNotes','Headphones','Microphone','Guitar','Book','BookOpen','Books','Newspaper','Camera','Palette','PuzzlePiece','Ticket','MaskHappy','Popcorn','Television','YoutubeLogo','SpotifyLogo','Cloud','Robot','Code','Rocket','Star','Smiley','Question','DotsThreeCircle','Warning','Info','Repeat','Target','Lightning','MagnifyingGlass']
 };
 const out = []; const all = new Set(); const missing = [];
 for (const [g, list] of Object.entries(groups)) for (const n of list) { if (!pi['Pi'+n+'Duotone']) missing.push(n); else all.add(n); }

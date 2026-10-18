@@ -4,9 +4,6 @@
   "webDir": "dist",
   "android": {
     "adjustMarginsForEdgeToEdge": "force",
-    "backgroundColor": "#f4f1fb"
-  },
-  "plugins": {
-    "StatusBar": { "overlaysWebView": false, "style": "LIGHT", "backgroundColor": "#f4f1fb" }
+    "backgroundColor": "#eef0f5"
   }
 }

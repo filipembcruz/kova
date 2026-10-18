@@ -18,7 +18,6 @@ export function Categories() {
   const active = cats.filter((c) => !c.archived);
   const archived = cats.filter((c) => c.archived);
   const base = s.settings.baseCurrency;
-  const hide = s.settings.hideBalance;
 
   const Grid = ({ list, add }: { list: typeof cats; add?: boolean }) => (
     <div className="cgrid">
@@ -32,12 +31,12 @@ export function Categories() {
               {c.budget ? (
                 <svg width={70} height={70} style={{ position: 'absolute', left: -4, top: -4, transform: 'rotate(-90deg)' }}>
                   <circle cx={35} cy={35} r={33} fill="none" stroke="var(--line)" strokeWidth={3} />
-                  <circle cx={35} cy={35} r={33} fill="none" stroke={v > c.budget ? 'var(--red)' : c.color} strokeWidth={3} strokeLinecap="round" strokeDasharray={`${(pct / 100) * 207} 207`} />
+                  <circle cx={35} cy={35} r={33} fill="none" stroke={v > c.budget ? 'var(--exp)' : c.color} strokeWidth={3} strokeLinecap="round" strokeDasharray={`${(pct / 100) * 207} 207`} />
                 </svg>
               ) : null}
             </div>
             <span className="nm">{c.name}</span>
-            {v > 0 && <span className="am">{hide ? '••' : money(v, base, locale, { compact: true, noCents: true })}</span>}
+            {v > 0 && <span className="am">{money(v, base, locale)}</span>}
           </button>
         );
       })}
@@ -54,7 +53,7 @@ export function Categories() {
     <>
       <div className="topbar">
         <h1>{t('categories')}</h1>
-        <button className="round-btn" onClick={() => openCategoryEditor(undefined, kind)} aria-label="add"><PiPlusBold /></button>
+        <button className="icon-btn solid" onClick={() => openCategoryEditor(undefined, kind)} aria-label="add"><PiPlusBold /></button>
       </div>
       <Seg<Kind>
         color
@@ -66,7 +65,7 @@ export function Categories() {
         ]}
       />
       <div className="small muted" style={{ margin: '16px 6px 0', fontWeight: 600 }}>{monthLabel(today().slice(0, 7), locale)}</div>
-      <div className="card" style={{ marginTop: 10, paddingTop: 22 }}>
+      <div className="paper" style={{ marginTop: 10, paddingTop: 22 }}>
         <Grid list={active} add />
       </div>
       {archived.length > 0 && (
@@ -75,7 +74,7 @@ export function Categories() {
             {t('archived')} <span className="tag">{archived.length}</span>
             <span className="link">{showArch ? <PiCaretUpBold /> : <PiCaretDownBold />}</span>
           </button>
-          {showArch && <div className="card" style={{ opacity: 0.7 }}><Grid list={archived} /></div>}
+          {showArch && <div className="paper" style={{ opacity: 0.7 }}><Grid list={archived} /></div>}
         </>
       )}
     </>

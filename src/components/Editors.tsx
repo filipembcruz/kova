@@ -8,6 +8,7 @@ import { Bubble, Sheet, Switch, confirmDialog } from './ui';
 import { openOverlay, toast } from '../lib/nav';
 import { balances, uid } from '../lib/calc';
 import { CURRENCIES } from '../lib/defaults';
+import { isEssential } from '../lib/report';
 
 function IconColorPicker({ icon, color, setIcon, setColor }: { icon: string; color: string; setIcon: (s: string) => void; setColor: (s: string) => void }) {
   const { t } = useT();
@@ -55,6 +56,7 @@ function CategoryEditor({ cat, kind, close }: { cat?: Category; kind: Kind; clos
   const [icon, setIcon] = useState(cat?.icon ?? 'shopping-bag');
   const [color, setColor] = useState(cat?.color ?? PALETTE[Math.floor(Math.random() * PALETTE.length)]);
   const [budget, setBudget] = useState(cat?.budget ? String(cat.budget / 100) : '');
+  const [essential, setEssential] = useState(isEssential(cat ?? undefined));
   const used = cat ? s.txs.some((x) => x.categoryId === cat.id) : false;
 
   const save = () => {
@@ -62,7 +64,7 @@ function CategoryEditor({ cat, kind, close }: { cat?: Category; kind: Kind; clos
     const b = Math.round(parseFloat(budget.replace(',', '.')) * 100);
     const c: Category = {
       id: cat?.id ?? uid(), name: name.trim(), kind: cat?.kind ?? kind, icon, color,
-      budget: b > 0 ? b : undefined, archived: cat?.archived ?? false,
+      budget: b > 0 ? b : undefined, archived: cat?.archived ?? false, essential,
       order: cat?.order ?? s.categories.filter((x) => x.kind === kind).length,
     };
     setState((st) => ({ ...st, categories: cat ? st.categories.map((x) => (x.id === c.id ? c : x)) : [...st.categories, c] }));
@@ -84,7 +86,7 @@ function CategoryEditor({ cat, kind, close }: { cat?: Category; kind: Kind; clos
       title={cat ? t('editCategory') : t('newCategory')}
       footer={<button className="btn grad" onClick={save}><PiCheckBold /> {t('save')}</button>}
       actions={cat && (
-        <button className="round-btn" style={{ width: 40, height: 40, boxShadow: 'none', background: 'var(--card2)' }} onClick={used ? archive : remove} aria-label="archive">
+        <button className="icon-btn solid" style={{ width: 40, height: 40, boxShadow: 'none', background: 'var(--sunk)' }} onClick={used ? archive : remove} aria-label="archive">
           {used ? <PiArchiveBold /> : <PiTrashBold />}
         </button>
       )}
@@ -99,6 +101,12 @@ function CategoryEditor({ cat, kind, close }: { cat?: Category; kind: Kind; clos
             <span>{t('budget')} ({s.settings.baseCurrency})</span>
             <input inputMode="decimal" value={budget} placeholder={t('budgetHint')} onChange={(e) => setBudget(e.target.value)} />
           </label>
+        )}
+        {(cat?.kind ?? kind) === 'expense' && (
+          <div className="field" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div className="grow"><b style={{ fontWeight: 600 }}>{t('essential')}</b><div className="small muted">{t('essentialD')}</div></div>
+            <Switch on={essential} onChange={setEssential} />
+          </div>
         )}
         {cat?.archived && <div className="tag lilac" style={{ margin: '4px 4px 0' }}>{t('archived')}</div>}
         <IconColorPicker icon={icon} color={color} setIcon={setIcon} setColor={setColor} />

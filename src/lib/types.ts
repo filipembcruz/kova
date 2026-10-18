@@ -21,6 +21,7 @@ export interface Category {
   icon: string;
   color: string;
   budget?: Cents; // monthly limit in base currency
+  essential?: boolean; // undefined = guessed from the name (reports)
   archived: boolean;
   order: number;
 }
@@ -36,7 +37,11 @@ export interface Tx {
   note: string;
   tags: string[];
   created: string;
+  repeat?: Repeat; // recurring series: next occurrence is created automatically
+  series?: string;
 }
+
+export type Repeat = 'weekly' | 'monthly' | 'yearly';
 
 export interface Transfer {
   id: string;
@@ -62,6 +67,8 @@ export interface Settings {
   hideBalance: boolean;
   weekStart: 0 | 1;
   onboarded: boolean;
+  autoBackup: boolean;
+  lastBackup?: string;
 }
 
 export interface State {

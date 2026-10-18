@@ -39,6 +39,9 @@ jobs:
         run: |
           npx cap add android
           cp -r android-res/* android/app/src/main/res/
+          JAVA_DIR=android/app/src/main/java/io/github/filipembcruz/kova
+          mkdir -p $JAVA_DIR
+          cp android-src/*.java $JAVA_DIR/
           npx cap sync android
 
       - name: Set version

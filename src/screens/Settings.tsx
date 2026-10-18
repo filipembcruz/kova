@@ -1,20 +1,18 @@
-import { useState } from 'react';
-import { PiUserDuotone, PiTranslateDuotone, PiPaletteDuotone, PiCurrencyCircleDollarDuotone, PiArrowsClockwiseBold, PiEyeSlashDuotone, PiCalendarDuotone, PiDownloadSimpleDuotone, PiUploadSimpleDuotone, PiFileCsvDuotone, PiTrashDuotone, PiGithubLogoDuotone, PiHeartDuotone, PiCaretRightBold, PiTagDuotone, PiSwapDuotone } from 'react-icons/pi';
+import { useEffect, useState } from 'react';
+import { PiUserDuotone, PiTranslateDuotone, PiPaletteDuotone, PiCurrencyCircleDollarDuotone, PiArrowsClockwiseBold, PiEyeSlashDuotone, PiCalendarDuotone, PiDownloadSimpleDuotone, PiUploadSimpleDuotone, PiFileCsvDuotone, PiTrashDuotone, PiHeartDuotone, PiCaretRightBold, PiTagDuotone, PiSwapDuotone, PiCloudCheckDuotone, PiGoogleDriveLogoDuotone, PiClockCounterClockwiseDuotone } from 'react-icons/pi';
 import type { State } from '../lib/types';
-import { getState, replaceState, setState, useStore } from '../lib/store';
+import { getState, replaceState, setState, useStore, backupNow } from '../lib/store';
 import { useT } from '../i18n';
 import { CURRENCIES, initialState, detectLang } from '../lib/defaults';
 import { Switch, Seg, confirmDialog, Sheet } from '../components/ui';
 import { navigate, openOverlay, toast } from '../lib/nav';
 import { importMmBackup } from '../lib/importer';
-import { pickFile, saveTextFile } from '../native';
+import { pickFile, saveTextFile, listAutoBackups, readAutoBackup } from '../native';
 import { today } from '../lib/calc';
 
 declare const __APP_VERSION__: string;
-export const REPO_URL = 'https://github.com/filipembcruz/kova';
-
-function Ico({ c, children }: { c: string; children: React.ReactNode }) {
-  return <div className="bubble" style={{ width: 42, height: 42, borderRadius: 14, background: c }}>{children}</div>;
+function Ico({ children }: { c?: string; children: React.ReactNode }) {
+  return <div className="set-ico">{children}</div>;
 }
 
 export async function updateRates(failMsg?: string) {
@@ -132,7 +130,7 @@ export function Settings() {
       <div className="topbar"><h1>{t('settings')}</h1></div>
 
       <div className="section-title">{t('profile')}</div>
-      <div className="card tight">
+      <div className="paper flush">
         <button className="setting" onClick={editName}>
           <Ico c="linear-gradient(145deg,#a996ff,#7c5cff)"><PiUserDuotone /></Ico>
           <div className="grow"><div className="t">{t('yourName')}</div><div className="s">{st.name || '—'}</div></div>
@@ -165,11 +163,11 @@ export function Settings() {
       </div>
 
       <div className="section-title">{t('currency')}</div>
-      <div className="card tight">
+      <div className="paper flush">
         <label className="setting">
           <Ico c="linear-gradient(145deg,#7ce8b3,#18b47b)"><PiCurrencyCircleDollarDuotone /></Ico>
           <div className="grow"><div className="t">{t('baseCurrency')}</div></div>
-          <select className="v" value={st.baseCurrency} onChange={(e) => changeBase(e.target.value)} style={{ border: 0, background: 'var(--card2)', borderRadius: 12, padding: '8px 10px', fontWeight: 600 }}>
+          <select className="v" value={st.baseCurrency} onChange={(e) => changeBase(e.target.value)} style={{ border: 0, background: 'var(--sunk)', borderRadius: 12, padding: '8px 10px', fontWeight: 600 }}>
             {[...new Set([st.baseCurrency, ...CURRENCIES])].map((c) => <option key={c}>{c}</option>)}
           </select>
         </label>
@@ -183,7 +181,7 @@ export function Settings() {
               </button>
             </div>
             {used.map((c) => (
-              <label key={c} className="field" style={{ boxShadow: 'none', background: 'var(--card2)', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <label key={c} className="field" style={{ boxShadow: 'none', background: 'var(--sunk)', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <b style={{ whiteSpace: 'nowrap' }}>1 {c} =</b>
                 <input
                   inputMode="decimal"
@@ -207,8 +205,34 @@ export function Settings() {
         </button>
       </div>
 
+      <div className="section-title">{t('autoBackup')}</div>
+      <div className="paper flush">
+        <div className="setting">
+          <Ico><PiCloudCheckDuotone /></Ico>
+          <div className="grow">
+            <div className="t">{t('autoBackup')}</div>
+            <div className="s">{t('autoBackupD')}</div>
+            {st.lastBackup && <div className="s">{t('lastBackup')}: {new Date(st.lastBackup).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' })}</div>}
+          </div>
+          <Switch on={st.autoBackup} onChange={(v) => set({ autoBackup: v })} />
+        </div>
+        <button className="setting" onClick={async () => { if (await backupNow()) toast(t('backupDone')); }}>
+          <Ico><PiArrowsClockwiseBold /></Ico>
+          <div className="grow"><div className="t">{t('backupNow')}</div></div>
+        </button>
+        <button className="setting" onClick={exportJson}>
+          <Ico><PiGoogleDriveLogoDuotone /></Ico>
+          <div className="grow"><div className="t">{t('saveToDrive')}</div><div className="s">{t('saveToDriveD')}</div></div>
+        </button>
+        <button className="setting" onClick={() => openOverlay((close) => <AutoBackups close={close} />)}>
+          <Ico><PiClockCounterClockwiseDuotone /></Ico>
+          <div className="grow"><div className="t">{t('restoreAuto')}</div></div>
+          <PiCaretRightBold className="muted" />
+        </button>
+      </div>
+
       <div className="section-title">{t('data')}</div>
-      <div className="card tight">
+      <div className="paper flush">
         <button className="setting" onClick={() => runMmImport(t)}>
           <Ico c="linear-gradient(145deg,#a996ff,#5b4bdb)"><PiDownloadSimpleDuotone /></Ico>
           <div className="grow"><div className="t">{t('importOther')}</div><div className="s">{t('importOtherD')}</div></div>
@@ -227,23 +251,54 @@ export function Settings() {
         </button>
         <button className="setting" onClick={erase}>
           <Ico c="linear-gradient(145deg,#ff9aa6,#f0445a)"><PiTrashDuotone /></Ico>
-          <div className="grow"><div className="t" style={{ color: 'var(--red)' }}>{t('eraseAll')}</div><div className="s">{t('eraseAllD')}</div></div>
+          <div className="grow"><div className="t" style={{ color: 'var(--exp)' }}>{t('eraseAll')}</div><div className="s">{t('eraseAllD')}</div></div>
         </button>
       </div>
 
       <div className="section-title">{t('about')}</div>
-      <div className="card tight">
-        <a className="setting" href={REPO_URL} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>
-          <Ico c="linear-gradient(145deg,#4b4560,#16131f)"><PiGithubLogoDuotone /></Ico>
-          <div className="grow"><div className="t">{t('sourceCode')}</div><div className="s">{t('openSource')} · MIT</div></div>
-          <PiCaretRightBold className="muted" />
-        </a>
+      <div className="paper flush">
         <div className="setting">
           <Ico c="linear-gradient(145deg,#ff9cc8,#e056fd)"><PiHeartDuotone /></Ico>
           <div className="grow"><div className="t">Kova</div><div className="s">{t('version')} {typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'}</div></div>
         </div>
       </div>
     </>
+  );
+}
+
+function AutoBackups({ close }: { close: () => void }) {
+  const { t, locale } = useT();
+  const [list, setList] = useState<string[] | null>(null);
+  useEffect(() => { listAutoBackups().then(setList); }, []);
+  const restore = async (name: string) => {
+    if (!(await confirmDialog(t('confirmImport'), t('restoreBackup'), t('cancel'), false))) return;
+    try {
+      const txt = await readAutoBackup(name);
+      const j = JSON.parse(txt ?? '');
+      replaceState({ ...j.state, settings: { ...j.state.settings, onboarded: true } });
+      toast(t('imported'));
+      close();
+    } catch {
+      toast(t('importFail'));
+    }
+  };
+  return (
+    <Sheet title={t('restoreAuto')}>
+      <div className="sheet-b">
+        {list && list.length === 0 && <div className="empty">{t('noBackups')}</div>}
+        <div className="paper flush">
+          {(list ?? []).map((n) => {
+            const d = n.match(/(\d{4}-\d{2}-\d{2})/)?.[1];
+            return (
+              <button key={n} className="setting" onClick={() => restore(n)}>
+                <Ico><PiClockCounterClockwiseDuotone /></Ico>
+                <div className="grow"><div className="t">{d ? new Date(d + 'T12:00').toLocaleDateString(locale, { dateStyle: 'full' }) : n}</div></div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </Sheet>
   );
 }
 

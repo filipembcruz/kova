@@ -17,20 +17,20 @@ export function Bubble({ icon, color, size = 46, round = false }: { icon: string
   const I = iconFor(icon);
   return (
     <div
-      className={'bubble' + (round ? ' round' : '')}
-      style={{ width: size, height: size, borderRadius: round ? '50%' : size * 0.36, background: `linear-gradient(145deg, ${lighten(color, 0.28)}, ${color})`, boxShadow: `0 8px 18px ${color}40` }}
+      className="bubble"
+      style={{ width: size, height: size, borderRadius: round ? '50%' : '50%', background: color }}
     >
       <I />
     </div>
   );
 }
 
-export function Money({ cents, currency, sign, compact, className, hide }: { cents: number; currency?: string; sign?: boolean; compact?: boolean; className?: string; hide?: boolean }) {
+/** Formats money. Only balances (balance=true) respect the "hide balances" privacy switch. */
+export function Money({ cents, currency, sign, compact, className, balance }: { cents: number; currency?: string; sign?: boolean; compact?: boolean; className?: string; balance?: boolean }) {
   const s = useStore();
   const { locale } = useT();
   const cur = currency ?? s.settings.baseCurrency;
-  const hidden = hide ?? s.settings.hideBalance;
-  if (hidden) return <span className={className}>••••</span>;
+  if (balance && s.settings.hideBalance) return <span className={className}>••••••</span>;
   return <span className={className}>{money(cents, cur, locale, { sign, compact })}</span>;
 }
 
@@ -59,7 +59,7 @@ export function Sheet({ title, children, footer, full, onClose, actions }: { tit
           <div className="sheet-h">
             <h2>{title}</h2>
             {actions}
-            <button className="round-btn" style={{ width: 40, height: 40, boxShadow: 'none', background: 'var(--card2)' }} onClick={onClose ?? closeOverlay} aria-label="close">
+            <button className="icon-btn" onClick={onClose ?? closeOverlay} aria-label="close">
               <PiXBold />
             </button>
           </div>
@@ -141,7 +141,7 @@ export function PeriodNav({ label, onPrev, onNext, nextDisabled, onLabel }: { la
 export function Empty({ icon = 'sparkle', title, hint }: { icon?: string; title: string; hint?: string }) {
   return (
     <div className="empty">
-      <Bubble icon={icon} color="#9B8CFF" size={64} round />
+      <Bubble icon={icon} color="#8F84C9" size={60} round />
       <b>{title}</b>
       {hint && <span className="small">{hint}</span>}
     </div>
