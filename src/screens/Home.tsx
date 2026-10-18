@@ -1,15 +1,17 @@
 import { useMemo, useState } from 'react';
-import { PiEyeBold, PiEyeSlashBold, PiCaretDownBold, PiCheckBold, PiArrowsClockwiseBold, PiSquaresFourBold, PiChartLineUpBold, PiArrowDownLeftBold, PiArrowUpRightBold, PiPiggyBankBold } from 'react-icons/pi';
+import { PiEyeBold, PiEyeSlashBold, PiCaretDownBold, PiCheckBold, PiArrowsClockwiseBold, PiListBulletsBold, PiChartLineUpBold, PiArrowDownLeftBold, PiArrowUpRightBold, PiPiggyBankBold, PiReceiptBold, PiCaretRightBold, PiBellRingingFill } from 'react-icons/pi';
 import type { Kind, Tx } from '../lib/types';
 import { setState, useBalances, useStore } from '../lib/store';
 import { useT } from '../i18n';
 import { addDays, byCategory, filterTx, parseIso, Period, periodOf, shiftPeriod, sum, today, toBase, pad } from '../lib/calc';
 import { money, shortDate } from '../lib/format';
-import { Bubble, Empty, PeriodNav, Sheet } from '../components/ui';
+import { Bubble, Empty, Sheet } from '../components/ui';
 import { Donut, PaceChart } from '../components/charts';
+import { PeriodControl } from '../components/Pickers';
 import { navigate, openOverlay, toast } from '../lib/nav';
 import { openTxEditor } from '../components/TxEditor';
-import { GranPicker, goTx, periodLabel } from './Transactions';
+import { goTx } from './Transactions';
+import { upcomingBills } from '../lib/reminders';
 
 export function Home() {
   const s = useStore();
@@ -22,59 +24,61 @@ export function Home() {
   const [period, setPeriod] = useState<Period>(() => periodOf('month', today(), s.settings.weekStart));
   const [sel, setSel] = useState<string | null>(null);
   const acc = s.accounts.find((a) => a.id === accId);
+  const accOpt = accId || undefined;
 
   const { rows, totalV } = useMemo(() => {
-    const txs = filterTx(s, period, kind, accId || undefined);
+    const txs = filterTx(s, period, kind, accOpt);
     const rows = byCategory(txs).map(([id, v]) => ({ id, v, cat: s.categories.find((c) => c.id === id) }));
     return { rows, totalV: sum(txs) };
   }, [s.txs, s.categories, period, kind, accId]);
 
-  const upcoming = useMemo(() => {
-    const now = today();
-    return s.txs.filter((x) => x.date > now && (!accId || x.accountId === accId)).sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 6);
-  }, [s.txs, accId]);
-
   const month = useMemo(() => {
     const m = periodOf('month', today());
-    const i = sum(filterTx(s, m, 'income', accId || undefined));
-    const e = sum(filterTx(s, m, 'expense', accId || undefined));
+    const i = sum(filterTx(s, m, 'income', accOpt));
+    const e = sum(filterTx(s, m, 'expense', accOpt));
     return { m, i, e, rate: i ? Math.round(((i - e) / i) * 100) : null };
   }, [s.txs, accId]);
 
   const pace = useMemo(() => {
     if (period.gran === 'day') return null;
-    const txs = filterTx(s, period, kind, accId || undefined);
+    const txs = filterTx(s, period, kind, accOpt);
     const now = today();
     const days = Math.round((parseIso(period.end).getTime() - parseIso(period.start).getTime()) / 864e5) + 1;
     const byMonth = period.gran === 'year' || days > 62;
-    const buckets: { key: string; label: string; value: number; today?: boolean }[] = [];
+    const buckets: { key: string; label: string; value: number; today?: boolean; full?: string }[] = [];
     if (byMonth) {
       const d0 = parseIso(period.start);
       for (let m = new Date(d0.getFullYear(), d0.getMonth(), 1); m <= parseIso(period.end); m = new Date(m.getFullYear(), m.getMonth() + 1, 1)) {
         const key = `${m.getFullYear()}-${pad(m.getMonth() + 1)}`;
-        buckets.push({ key, label: m.toLocaleDateString(locale, { month: 'narrow' }), value: 0, today: now.startsWith(key) });
+        buckets.push({ key, label: m.toLocaleDateString(locale, { month: 'narrow' }), full: m.toLocaleDateString(locale, { month: 'short' }).replace('.', ''), value: 0, today: now.startsWith(key) });
       }
       for (const x of txs) { const b = buckets.find((k) => k.key === x.date.slice(0, 7)); if (b) b.value += x.base; }
     } else {
       for (let d = period.start; d <= period.end; d = addDays(d, 1)) {
         const dt = parseIso(d);
-        buckets.push({ key: d, label: period.gran === 'week' ? dt.toLocaleDateString(locale, { weekday: 'short' }).replace('.', '') : String(dt.getDate()), value: 0, today: d === now });
+        buckets.push({ key: d, label: period.gran === 'week' ? dt.toLocaleDateString(locale, { weekday: 'short' }).replace('.', '') : String(dt.getDate()), full: shortDate(d, locale), value: 0, today: d === now });
       }
       const idx = new Map(buckets.map((b, i) => [b.key, i]));
       for (const x of txs) { const i = idx.get(x.date); if (i !== undefined) buckets[i].value += x.base; }
     }
-    const total = sum(txs);
+    const totalP = sum(txs);
     const elapsed = buckets.filter((b) => b.key <= now.slice(0, b.key.length)).length || buckets.length;
-    const avg = total / Math.max(1, elapsed);
+    const avg = totalP / Math.max(1, elapsed);
     const isCurrent = period.start <= now && now <= period.end;
-    const prevTotal = sum(filterTx(s, shiftPeriod(period, -1, s.settings.weekStart), kind, accId || undefined));
-    return { buckets, avg, total, byMonth, projection: isCurrent ? Math.round(avg * buckets.length) : null, change: prevTotal ? ((total - prevTotal) / prevTotal) * 100 : null };
+    const prevTotal = sum(filterTx(s, shiftPeriod(period, -1, s.settings.weekStart), kind, accOpt));
+    return { buckets, avg, total: totalP, byMonth, projection: isCurrent ? Math.round(avg * buckets.length) : null, change: prevTotal ? ((totalP - prevTotal) / prevTotal) * 100 : null };
   }, [s.txs, period, kind, accId, locale]);
+
+  const bills = useMemo(() => upcomingBills(s).filter((x) => !accId || x.accountId === accId).slice(0, 4), [s.txs, accId]);
+  const planned = useMemo(() => {
+    const now = today();
+    return s.txs.filter((x) => x.date > now && !x.done && !x.series && (!accId || x.accountId === accId)).sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 4);
+  }, [s.txs, accId]);
 
   const balanceV = acc ? bal.get(acc.id) ?? 0 : total;
   const balanceCur = acc ? acc.currency : base;
   const selRow = rows.find((r) => r.id === sel);
-  const kColor = kind === 'expense' ? 'var(--exp)' : 'var(--inc)';
+  const monthQ = { gran: 'month', start: month.m.start, end: month.m.end, view: 'group', ...(accId ? { acc: accId } : {}) };
 
   const pickAccount = () =>
     openOverlay((close) => (
@@ -101,46 +105,46 @@ export function Home() {
 
   return (
     <>
-      <div className="topbar">
-        <button className="acct-pick" onClick={pickAccount}>
-          <Bubble icon={acc?.icon ?? 'wallet'} color={acc?.color ?? '#5B3DF5'} size={28} />
-          {acc?.name ?? t('total')}
-          <PiCaretDownBold className="caret" />
-        </button>
-        <div className="grow" />
-        <button className="icon-btn" onClick={() => setState((st) => ({ ...st, settings: { ...st.settings, hideBalance: !st.settings.hideBalance } }))} aria-label="hide balance">
-          {hide ? <PiEyeSlashBold /> : <PiEyeBold />}
-        </button>
-      </div>
-
-      <div className="balance">
-        <div className="lbl">{acc ? t('balance') : t('totalBalance')}</div>
-        <div className={'val' + (hide ? ' hidden' : '')}>{hide ? '••••••' : money(balanceV, balanceCur, locale)}</div>
-        {acc && acc.currency !== base && !hide && <div className="small muted">≈ {money(toBase(s, balanceV, acc.currency), base, locale)}</div>}
-      </div>
-
-      <div className="month-sum">
-        <button onClick={() => goTx({ kind: 'income', gran: 'month', start: month.m.start, end: month.m.end, ...(accId ? { acc: accId } : {}) })}>
-          <span><PiArrowDownLeftBold /> {t('income')}</span>
-          <b className="pos">{money(month.i, base, locale)}</b>
-        </button>
-        <button onClick={() => goTx({ kind: 'expense', gran: 'month', start: month.m.start, end: month.m.end, ...(accId ? { acc: accId } : {}) })}>
-          <span><PiArrowUpRightBold /> {t('expenses')}</span>
-          <b>{money(month.e, base, locale)}</b>
-        </button>
-        <button onClick={() => navigate('/charts')}>
-          <span><PiPiggyBankBold /> {t('savedShort')}</span>
-          <b style={{ color: (month.rate ?? 0) >= 0 ? 'var(--brand)' : 'var(--exp)' }}>{month.rate === null ? '—' : `${month.rate}%`}</b>
-        </button>
-      </div>
-
-      <div className="paper">
-        <div className="kind-toggle" style={{ ['--k' as any]: kColor }}>
-          <button className={kind === 'expense' ? 'on' : ''} onClick={() => { setKind('expense'); setSel(null); }}>{t('expenses')}</button>
-          <button className={kind === 'income' ? 'on' : ''} onClick={() => { setKind('income'); setSel(null); }}>{t('income')}</button>
+      <div className="hero">
+        <div className="bar-top">
+          <button className="acct glass" onClick={pickAccount}>
+            <Bubble icon={acc?.icon ?? 'wallet'} color={acc?.color ?? '#FFFFFF'} size={28} solid={!!acc} />
+            {acc?.name ?? t('total')}
+            <PiCaretDownBold className="caret" />
+          </button>
+          <div className="grow" />
+          <button className="eye glass" onClick={() => setState((st) => ({ ...st, settings: { ...st.settings, hideBalance: !st.settings.hideBalance } }))} aria-label="hide balance">
+            {hide ? <PiEyeSlashBold /> : <PiEyeBold />}
+          </button>
         </div>
-        <GranPicker period={period} setPeriod={(p) => { setPeriod(p); setSel(null); }} />
-        <PeriodNav label={periodLabel(period, locale)} onPrev={() => setPeriod(shiftPeriod(period, -1, s.settings.weekStart))} onNext={() => setPeriod(shiftPeriod(period, 1, s.settings.weekStart))} />
+        <div className="lbl">{acc ? t('balance') : t('totalBalance')}</div>
+        <div className={'big' + (hide ? ' hidden' : '')}>{hide ? '••••••' : money(balanceV, balanceCur, locale)}</div>
+        {acc && acc.currency !== base && !hide && <div className="sub">≈ {money(toBase(s, balanceV, acc.currency), base, locale)}</div>}
+        <div className="tiles">
+          <button className="glass" onClick={() => goTx({ kind: 'income', ...monthQ })}>
+            <span><i><PiArrowDownLeftBold /></i>{t('income')}</span>
+            <b>{money(month.i, base, locale)}</b>
+          </button>
+          <button className="glass" onClick={() => goTx({ kind: 'expense', ...monthQ })}>
+            <span><i><PiArrowUpRightBold /></i>{t('expenses')}</span>
+            <b>{money(month.e, base, locale)}</b>
+          </button>
+          <button className="glass" onClick={() => navigate('/charts')}>
+            <span><i><PiPiggyBankBold /></i>{t('savedShort')}</span>
+            <b>{month.rate === null ? '—' : `${month.rate}%`}</b>
+          </button>
+        </div>
+      </div>
+
+      <div className="paper lift">
+        <div className="tabs-center">
+          <div className="track">
+            <span className="thumb" style={{ width: 'calc(50% - 4px)', transform: `translateX(${kind === 'expense' ? 0 : 100}%)` }} />
+            <button className={kind === 'expense' ? 'on' : ''} onClick={() => { setKind('expense'); setSel(null); }}><span className="dot" style={{ background: 'var(--exp)' }} />{t('expenses')}</button>
+            <button className={kind === 'income' ? 'on' : ''} onClick={() => { setKind('income'); setSel(null); }}><span className="dot" style={{ background: 'var(--inc)' }} />{t('income')}</button>
+          </div>
+        </div>
+        <PeriodControl period={period} setPeriod={(p) => { setPeriod(p); setSel(null); }} />
 
         {rows.length === 0 ? (
           <Empty icon="sparkle" title={t('noData')} hint={t('noDataHint')} />
@@ -178,11 +182,12 @@ export function Home() {
             {kind === 'expense' ? t('spendingPace') : t('incomePace')}
             {pace.change !== null && Math.abs(pace.change) >= 1 && (
               <span className={'tag ' + ((kind === 'expense' ? pace.change > 0 : pace.change < 0) ? 'red' : 'green')} style={{ marginLeft: 'auto' }}>
-                {pace.change > 0 ? '+' : ''}{Math.round(pace.change)}% {t('vsPrevPeriod')}
+                {pace.change > 300 ? '>300' : `${pace.change > 0 ? '+' : ''}${Math.round(pace.change)}`}% {t('vsPrevPeriod')}
               </span>
             )}
           </h3>
-          <PaceChart data={pace.buckets} avg={pace.avg} color={kind === 'expense' ? '#E5484D' : '#11905A'} fmt={(v) => money(v, base, locale, { noCents: true })} />
+          <PaceChart data={pace.buckets} avg={pace.avg} color={kind === 'expense' ? '#EF4444' : '#10A36A'} fmt={(v) => money(v, base, locale)} />
+          <div className="small muted" style={{ margin: '4px 6px 0' }}>{t('tapBar')}</div>
           <div className="stats" style={{ marginTop: 6 }}>
             <div className="st"><span>{pace.byMonth ? t('monthlyAvg') : t('dailyAvg')}</span><b>{money(Math.round(pace.avg), base, locale)}</b></div>
             {pace.projection !== null && <div className="st"><span>{t('projected')}</span><b style={{ color: 'var(--brand)' }}>{money(pace.projection, base, locale)}</b></div>}
@@ -190,21 +195,26 @@ export function Home() {
         </div>
       )}
 
-      {upcoming.length > 0 && (
+      {(bills.length > 0 || planned.length > 0) && (
         <>
-          <div className="section-title">{t('upcoming')}</div>
+          <button className="section-title" style={{ width: 'calc(100% - 16px)' }} onClick={() => navigate('/bills')}>
+            {t('upcoming')} <span className="link">{t('seeAll')} <PiCaretRightBold /></span>
+          </button>
           <div className="paper flush">
-            {upcoming.map((x) => <PlannedRow key={x.id} tx={x} />)}
+            {[...bills, ...planned].sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 5).map((x) => <PlannedRow key={x.id} tx={x} />)}
           </div>
         </>
       )}
 
-      <div className="qa" style={{ marginTop: 4 }}>
+      <div className="qa">
         <button onClick={() => goTx(accId ? { acc: accId } : {})}>
-          <span className="set-ico"><PiSquaresFourBold /></span>{t('transactions')}
+          <span className="set-ico"><PiListBulletsBold /></span>{t('transactions')}
+        </button>
+        <button onClick={() => navigate('/bills')}>
+          <span className="set-ico" style={{ background: 'var(--plan-soft)', color: 'var(--plan)' }}><PiReceiptBold /></span>{t('fixedBills')}
         </button>
         <button onClick={() => navigate('/charts')}>
-          <span className="set-ico" style={{ background: 'var(--brand-soft)', color: 'var(--brand)' }}><PiChartLineUpBold /></span>{t('seeReport')}
+          <span className="set-ico" style={{ background: 'var(--brand-soft)', color: 'var(--brand)' }}><PiChartLineUpBold /></span>{t('reports')}
         </button>
       </div>
     </>
@@ -216,23 +226,26 @@ export function PlannedRow({ tx }: { tx: Tx }) {
   const { t, locale } = useT();
   const cat = s.categories.find((c) => c.id === tx.categoryId);
   const acc = s.accounts.find((a) => a.id === tx.accountId);
+  const days = Math.round((parseIso(tx.date).getTime() - parseIso(today()).getTime()) / 864e5);
   const confirm = () => {
-    setState((st) => ({ ...st, txs: st.txs.map((x) => (x.id === tx.id ? { ...x, date: today() } : x)) }));
+    setState((st) => ({ ...st, txs: st.txs.map((x) => (x.id === tx.id ? { ...x, done: true } : x)) }));
     toast(t('confirmed'));
   };
   return (
-    <div className="item planned-row" style={{ cursor: 'pointer' }} onClick={() => openTxEditor({ tx })}>
+    <div className="item" style={{ cursor: 'pointer' }} onClick={() => openTxEditor({ tx })}>
       <Bubble icon={cat?.icon ?? 'question'} color={cat?.color ?? '#999'} size={42} />
       <div className="grow">
         <div className="t">{tx.note || cat?.name}</div>
-        <div className="s">
-          <span className="tag plan">{shortDate(tx.date, locale)}</span> {acc?.name}
-          {tx.repeat && <> · <PiArrowsClockwiseBold size={11} /> {t(tx.repeat)}</>}
+        <div className="s" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span className={'tag ' + (days <= 3 ? 'red' : 'plan')}>{days === 1 ? t('tomorrow') : `${shortDate(tx.date, locale)} · ${t('inDays', { n: String(days) })}`}</span>
+          {acc?.name}
+          {tx.repeat && <><PiArrowsClockwiseBold size={11} /> {t(tx.repeat)}</>}
+          {tx.remind !== undefined && tx.remind >= 0 && <PiBellRingingFill size={12} style={{ color: 'var(--brand)' }} />}
         </div>
       </div>
       <div className="right">
         <div className={'amt ' + (tx.kind === 'income' ? 'pos' : 'neg')}>{tx.kind === 'income' ? '+' : '−'}{money(tx.amount, acc?.currency ?? s.settings.baseCurrency, locale)}</div>
-        <button className="mini-btn" style={{ marginTop: 6 }} onClick={(e) => { e.stopPropagation(); confirm(); }}>{t('confirmNow')}</button>
+        <button className="mini-btn" style={{ marginTop: 6 }} onClick={(e) => { e.stopPropagation(); confirm(); }}>{tx.kind === 'income' ? t('markReceived') : t('markPaid')}</button>
       </div>
     </div>
   );

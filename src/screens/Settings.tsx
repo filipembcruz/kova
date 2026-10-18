@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { PiUserDuotone, PiTranslateDuotone, PiPaletteDuotone, PiCurrencyCircleDollarDuotone, PiArrowsClockwiseBold, PiEyeSlashDuotone, PiCalendarDuotone, PiDownloadSimpleDuotone, PiUploadSimpleDuotone, PiFileCsvDuotone, PiTrashDuotone, PiHeartDuotone, PiCaretRightBold, PiTagDuotone, PiSwapDuotone, PiCloudCheckDuotone, PiGoogleDriveLogoDuotone, PiClockCounterClockwiseDuotone } from 'react-icons/pi';
+import { useEffect, useMemo, useState } from 'react';
+import { PiUserDuotone, PiTranslateDuotone, PiPaletteDuotone, PiCurrencyCircleDollarDuotone, PiArrowsClockwiseBold, PiEyeSlashDuotone, PiCalendarDuotone, PiDownloadSimpleDuotone, PiUploadSimpleDuotone, PiFileCsvDuotone, PiTrashDuotone, PiHeartDuotone, PiCaretRightBold, PiTagDuotone, PiSwapDuotone, PiCloudCheckDuotone, PiHashDuotone, PiReceiptDuotone, PiGoogleDriveLogoDuotone, PiClockCounterClockwiseDuotone } from 'react-icons/pi';
 import type { State } from '../lib/types';
 import { getState, replaceState, setState, useStore, backupNow } from '../lib/store';
 import { useT } from '../i18n';
@@ -41,6 +41,26 @@ export async function updateRates(failMsg?: string) {
   return false;
 }
 
+export async function exportBackupFile(t: (k: any) => string) {
+  const { buildBackup } = await import('../lib/backup');
+  await saveTextFile(`kova-backup-${today()}.json`, await buildBackup(), 'application/json', t('exportBackup'));
+}
+
+export async function restoreFromFile(t: (k: any) => string, ask = true) {
+  const f = await pickFile('*/*');
+  if (!f) return;
+  try {
+    const text = await f.text();
+    if (ask && !(await confirmDialog(t('confirmImport'), t('restoreBackup'), t('cancel'), false))) return;
+    const { restoreBackup } = await import('../lib/backup');
+    await restoreBackup(text);
+    toast(t('imported'));
+    navigate('/', true);
+  } catch {
+    toast(t('importFail'));
+  }
+}
+
 export async function runMmImport(t: (k: any) => string) {
   const f = await pickFile('*/*');
   if (!f) return;
@@ -49,7 +69,9 @@ export async function runMmImport(t: (k: any) => string) {
   toast(t('importing'));
   try {
     const buf = await f.arrayBuffer();
-    const { state, report } = await importMmBackup(buf, getState());
+    const { state, report, files } = await importMmBackup(buf, getState());
+    const { putFile } = await import('../lib/files');
+    for (const [id, b] of files) await putFile(id, b);
     replaceState(state);
     toast(`${t('imported')}: ${report.txs} ${t('transactions').toLowerCase()} · ${report.accounts} ${t('accounts').toLowerCase()}`);
     navigate('/', true);
@@ -83,24 +105,8 @@ export function Settings() {
     });
   };
 
-  const exportJson = async () => {
-    const data = JSON.stringify({ app: 'kova', version: 1, exported: new Date().toISOString(), state: getState() });
-    await saveTextFile(`kova-backup-${today()}.json`, data, 'application/json', t('exportBackup'));
-  };
-  const restoreJson = async () => {
-    const f = await pickFile('application/json,.json');
-    if (!f) return;
-    try {
-      const j = JSON.parse(await f.text());
-      const state: State = j.state ?? j;
-      if (!state.accounts || !state.txs) throw new Error('bad');
-      if (!(await confirmDialog(t('confirmImport'), t('restoreBackup'), t('cancel'), false))) return;
-      replaceState({ ...state, settings: { ...state.settings, onboarded: true } });
-      toast(t('imported'));
-    } catch {
-      toast(t('importFail'));
-    }
-  };
+  const exportJson = () => exportBackupFile(t);
+  const restoreJson = () => restoreFromFile(t);
   const exportCsv = async () => {
     const x = getState();
     const cat = new Map(x.categories.map((c) => [c.id, c.name]));
@@ -198,6 +204,16 @@ export function Settings() {
             {st.ratesUpdated && <div className="small muted" style={{ padding: '0 4px' }}>{t('ratesUpdated')}: {new Date(st.ratesUpdated).toLocaleString(locale)}</div>}
           </div>
         )}
+        <button className="setting" onClick={() => openOverlay(() => <TagsSheet />)}>
+          <Ico><PiHashDuotone /></Ico>
+          <div className="grow"><div className="t">{t('manageTags')}</div></div>
+          <PiCaretRightBold className="muted" />
+        </button>
+        <button className="setting" onClick={() => navigate('/bills')}>
+          <Ico><PiReceiptDuotone /></Ico>
+          <div className="grow"><div className="t">{t('fixedBills')}</div></div>
+          <PiCaretRightBold className="muted" />
+        </button>
         <button className="setting" onClick={() => navigate('/categories')}>
           <Ico c="linear-gradient(145deg,#e7a1ff,#b57bff)"><PiTagDuotone /></Ico>
           <div className="grow"><div className="t">{t('manageCategories')}</div></div>
@@ -266,6 +282,57 @@ export function Settings() {
   );
 }
 
+function TagsSheet() {
+  const s = useStore();
+  const { t } = useT();
+  const tags = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const x of s.txs) for (const g of x.tags) m.set(g, (m.get(g) ?? 0) + 1);
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [s.txs]);
+  return (
+    <Sheet title={t('manageTags')}>
+      <div className="sheet-b">
+        {tags.length === 0 && <div className="empty">{t('noTags')}</div>}
+        <div className="paper flush">
+          {tags.map(([g, n]) => (
+            <button key={g} className="setting" onClick={() => openOverlay((close) => <TagEdit tag={g} close={close} />)}>
+              <Ico><PiHashDuotone /></Ico>
+              <div className="grow"><div className="t">{g}</div><div className="s">{n} {t('transactions').toLowerCase()}</div></div>
+              <PiCaretRightBold className="muted" />
+            </button>
+          ))}
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+
+function TagEdit({ tag, close }: { tag: string; close: () => void }) {
+  const { t } = useT();
+  const [v, setV] = useState(tag);
+  const rename = () => {
+    const nv = v.trim().replace(/^#/, '');
+    if (!nv) return;
+    setState((st) => ({ ...st, txs: st.txs.map((x) => (x.tags.includes(tag) ? { ...x, tags: [...new Set(x.tags.map((g) => (g === tag ? nv : g)))] } : x)) }));
+    toast(t('savedOk'));
+    close();
+  };
+  const remove = async () => {
+    if (!(await confirmDialog(t('confirmDelete'), t('delete'), t('cancel')))) return;
+    setState((st) => ({ ...st, txs: st.txs.map((x) => (x.tags.includes(tag) ? { ...x, tags: x.tags.filter((g) => g !== tag) } : x)) }));
+    close();
+  };
+  return (
+    <Sheet title={'#' + tag} footer={<><button className="btn danger" onClick={remove}>{t('delete')}</button><button className="btn primary" onClick={rename}>{t('save')}</button></>}>
+      <div className="sheet-b">
+        <label className="field"><span>{t('name')}</span><input value={v} onChange={(e) => setV(e.target.value)} /></label>
+        <div className="small muted" style={{ margin: '0 6px' }}>{t('renameTagHint')}</div>
+      </div>
+    </Sheet>
+  );
+}
+
 function AutoBackups({ close }: { close: () => void }) {
   const { t, locale } = useT();
   const [list, setList] = useState<string[] | null>(null);
@@ -274,8 +341,8 @@ function AutoBackups({ close }: { close: () => void }) {
     if (!(await confirmDialog(t('confirmImport'), t('restoreBackup'), t('cancel'), false))) return;
     try {
       const txt = await readAutoBackup(name);
-      const j = JSON.parse(txt ?? '');
-      replaceState({ ...j.state, settings: { ...j.state.settings, onboarded: true } });
+      const { restoreBackup } = await import('../lib/backup');
+      await restoreBackup(txt ?? '');
       toast(t('imported'));
       close();
     } catch {

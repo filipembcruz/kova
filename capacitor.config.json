@@ -3,7 +3,7 @@
   "appName": "Kova",
   "webDir": "dist",
   "android": {
-    "adjustMarginsForEdgeToEdge": "force",
-    "backgroundColor": "#eef0f5"
+    "adjustMarginsForEdgeToEdge": "disable",
+    "backgroundColor": "#f4f5fa"
   }
 }

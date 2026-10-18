@@ -21,6 +21,9 @@
 - **Categories** — 180+ modern icons (Phosphor), 24 colors, optional monthly budgets with progress rings.
 - **Settings** — language (auto / English / Português), light/dark/system theme, hide balances, main currency, exchange rates (manual or online update), backups.
 - **Fast entry** — built-in calculator keypad, tags, notes, today/yesterday shortcuts.
+- **Fixed bills & reminders** — recurring bills with phone notifications before the due date; fixed costs are detected from your history.
+- **Attachments** — add photos or PDFs (receipts, invoices) to any transaction.
+- **Drag to reorder** categories and accounts; rename or delete tags.
 - **Search** — accent-insensitive search across notes, categories, accounts, tags and amounts, with multi-category filters and sorting by amount.
 - **Automatic backup** — a daily copy kept on the phone and included in Android's backup to Google Drive; one tap to send a backup file to Drive.
 - **Your data stays on your phone.** No account, no ads, no tracking.

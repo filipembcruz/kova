@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
-import { PiHouse, PiHouseFill, PiWallet, PiWalletFill, PiChartPieSlice, PiChartPieSliceFill, PiSquaresFour, PiSquaresFourFill, PiGearSix, PiGearSixFill, PiPlusBold, PiDownloadSimpleBold, PiSparkleBold } from 'react-icons/pi';
+import { PiHouse, PiHouseFill, PiWallet, PiWalletFill, PiChartPieSlice, PiChartPieSliceFill, PiSquaresFour, PiSquaresFourFill, PiGearSix, PiGearSixFill, PiPlusBold, PiDownloadSimpleBold, PiSparkleBold, PiCloudArrowDownBold } from 'react-icons/pi';
 import { isLoaded, loadState, setState, useStore } from './lib/store';
-import { useT } from './i18n';
-import { goTab, useRoute } from './lib/nav';
+import { useT, resolveLang } from './i18n';
+import { goTab, useRoute, useOverlays } from './lib/nav';
 import { OverlayHost, Toast } from './components/ui';
 import { openTxEditor } from './components/TxEditor';
 import { Home } from './screens/Home';
 import { Accounts } from './screens/Accounts';
 import { Charts } from './screens/Charts';
 import { Categories } from './screens/Categories';
-import { Settings, runMmImport, updateRates } from './screens/Settings';
+import { Settings, runMmImport, updateRates, restoreFromFile } from './screens/Settings';
 import { Transactions } from './screens/Transactions';
+import { Bills } from './screens/Bills';
 import { setStatusBar } from './native';
 
 function useTheme() {
@@ -25,10 +26,21 @@ function useTheme() {
   const dark = s.settings.theme === 'dark' || (s.settings.theme === 'system' && sysDark);
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-    const bg = dark ? '#0d0e14' : '#eef0f5';
-    document.querySelector('meta[name=theme-color]')?.setAttribute('content', bg);
-    setStatusBar(dark, bg);
-  }, [dark]);
+    document.documentElement.lang = resolveLang(s.settings.lang) === 'pt' ? 'pt-BR' : 'en';
+  }, [dark, s.settings.lang]);
+  return dark;
+}
+
+/** Status bar icons: light over the violet hero (home / welcome), otherwise follow the theme. */
+function useSystemBars(dark: boolean, onboarded: boolean) {
+  const r = useRoute();
+  const ovs = useOverlays();
+  const overHero = !onboarded || (r.path === '/' && ovs.length === 0);
+  useEffect(() => {
+    const bg = dark ? '#0b0b13' : '#f4f5fa';
+    document.querySelector('meta[name=theme-color]')?.setAttribute('content', overHero ? (dark ? '#140c3d' : '#24127a') : bg);
+    setStatusBar(overHero || dark, bg, dark);
+  }, [dark, overHero]);
 }
 
 export function App() {
@@ -36,13 +48,14 @@ export function App() {
   useEffect(() => {
     loadState().then(() => setReady(true));
   }, []);
-  useTheme();
+  const dark = useTheme();
   if (!ready) return null;
-  return <Shell />;
+  return <Shell dark={dark} />;
 }
 
-function Shell() {
+function Shell({ dark }: { dark: boolean }) {
   const s = useStore();
+  useSystemBars(dark, s.settings.onboarded);
   useEffect(() => {
     const last = s.settings.ratesUpdated ? new Date(s.settings.ratesUpdated).getTime() : 0;
     if (s.settings.onboarded && Date.now() - last > 12 * 3600e3 && s.accounts.some((a) => a.currency !== s.settings.baseCurrency)) updateRates();
@@ -67,6 +80,7 @@ function Main() {
   else if (path === '/categories') screen = <Categories />;
   else if (path === '/settings') screen = <Settings />;
   else if (path === '/tx') screen = <Transactions key={r.query.toString()} />;
+  else if (path === '/bills') screen = <Bills />;
   else screen = <Home />;
 
   const tabs = [
@@ -76,12 +90,12 @@ function Main() {
     { p: '/categories', icon: PiSquaresFour, on: PiSquaresFourFill, l: t('categories') },
     { p: '/settings', icon: PiGearSix, on: PiGearSixFill, l: t('settings') },
   ];
-  const showFab = path === '/' || path === '/accounts' || path === '/tx';
+  const showFab = path === '/' || path === '/accounts' || path === '/tx' || path === '/bills';
   const accFromRoute = path === '/tx' ? r.query.get('acc') ?? undefined : undefined;
 
   return (
     <>
-      <div className={'app' + (isTab ? '' : ' sub')}>{screen}</div>
+      <div className={'app' + (isTab ? '' : ' sub') + (path === '/' ? ' home' : '')}>{screen}</div>
       {showFab && (
         <button className="fab" style={!isTab ? { bottom: 'calc(20px + var(--safe-bottom))' } : undefined} onClick={() => openTxEditor({ accountId: accFromRoute })} aria-label="add">
           <PiPlusBold />
@@ -89,17 +103,15 @@ function Main() {
       )}
       {isTab && (
         <nav className="nav">
-          <div className="in">
-            {tabs.map((x) => {
-              const I = path === x.p ? x.on : x.icon;
-              return (
-                <button key={x.p} className={path === x.p ? 'on' : ''} onClick={() => goTab(x.p)}>
-                  <I />
-                  <span>{x.l}</span>
-                </button>
-              );
-            })}
-          </div>
+          {tabs.map((x) => {
+            const I = path === x.p ? x.on : x.icon;
+            return (
+              <button key={x.p} className={path === x.p ? 'on' : ''} onClick={() => goTab(x.p)}>
+                <I />
+                <span>{x.l}</span>
+              </button>
+            );
+          })}
         </nav>
       )}
     </>
@@ -111,34 +123,32 @@ function Welcome() {
   return (
     <div className="welcome">
       <div className="art">
-        <svg viewBox="0 0 300 260" width="300" height="260" aria-hidden>
-          <defs>
-            <linearGradient id="wg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#7c5cff" /><stop offset="1" stopColor="#ff5fa2" /></linearGradient>
-            <linearGradient id="wg2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#3dd68c" /><stop offset="1" stopColor="#12b886" /></linearGradient>
-          </defs>
-          <circle cx="150" cy="130" r="118" fill="url(#wg)" opacity=".12" />
-          <rect x="62" y="70" width="176" height="112" rx="26" fill="url(#wg)" />
-          <rect x="62" y="96" width="176" height="18" fill="#000" opacity=".12" />
-          <rect x="84" y="140" width="64" height="12" rx="6" fill="#fff" opacity=".85" />
-          <circle cx="206" cy="146" r="14" fill="#ffd36b" />
-          <circle cx="226" cy="58" r="26" fill="url(#wg2)" />
-          <text x="226" y="66" textAnchor="middle" fontSize="24" fontWeight="700" fill="#fff">$</text>
-          <circle cx="70" cy="200" r="20" fill="#ffb020" />
-          <text x="70" y="207" textAnchor="middle" fontSize="18" fontWeight="700" fill="#fff">€</text>
-          <rect x="196" y="196" width="18" height="34" rx="6" fill="#9b8cff" />
-          <rect x="220" y="182" width="18" height="48" rx="6" fill="#ff5fa2" />
-          <rect x="244" y="206" width="18" height="24" rx="6" fill="#3d8bff" />
+        <svg viewBox="0 0 300 250" width="300" height="250" aria-hidden>
+          <rect x="40" y="30" width="220" height="150" rx="30" fill="rgba(255,255,255,.12)" stroke="rgba(255,255,255,.25)" />
+          <circle cx="110" cy="105" r="44" fill="none" stroke="rgba(255,255,255,.18)" strokeWidth="16" />
+          <circle cx="110" cy="105" r="44" fill="none" stroke="#ffd36b" strokeWidth="16" strokeDasharray="110 300" transform="rotate(-90 110 105)" />
+          <circle cx="110" cy="105" r="44" fill="none" stroke="#3fd28f" strokeWidth="16" strokeDasharray="70 300" strokeDashoffset="-114" transform="rotate(-90 110 105)" />
+          <circle cx="110" cy="105" r="44" fill="none" stroke="#ff7ab6" strokeWidth="16" strokeDasharray="60 300" strokeDashoffset="-188" transform="rotate(-90 110 105)" />
+          <rect x="175" y="72" width="62" height="10" rx="5" fill="rgba(255,255,255,.85)" />
+          <rect x="175" y="92" width="44" height="8" rx="4" fill="rgba(255,255,255,.45)" />
+          <rect x="175" y="116" width="54" height="8" rx="4" fill="rgba(255,255,255,.45)" />
+          <rect x="70" y="196" width="160" height="34" rx="17" fill="rgba(255,255,255,.95)" />
+          <text x="150" y="219" textAnchor="middle" fontSize="15" fontWeight="700" fill="#5233ec" fontFamily="Inter, sans-serif">R$ 475.745,32</text>
         </svg>
       </div>
       <img className="logo" src="logo.svg" alt="Kova" />
       <h1>{t('welcomeTitle')}</h1>
       <p>{t('welcomeText')}</p>
-      <button className="btn grad" style={{ width: '100%', flex: 'none' }} onClick={() => setState((s) => ({ ...s, settings: { ...s.settings, onboarded: true } }))}>
+      <button className="btn light" onClick={() => setState((s) => ({ ...s, settings: { ...s.settings, onboarded: true } }))}>
         <PiSparkleBold /> {t('startFresh')}
       </button>
-      <button className="btn ghost" style={{ width: '100%', marginTop: 12 }} onClick={() => runMmImport(t)}>
+      <button className="btn ghost" onClick={() => restoreFromFile(t, false)}>
+        <PiCloudArrowDownBold /> {t('restoreBackupWelcome')}
+      </button>
+      <button className="btn ghost" onClick={() => runMmImport(t)}>
         <PiDownloadSimpleBold /> {t('importOther')}
       </button>
+      <div style={{ fontSize: 12.5, opacity: 0.7, marginTop: 12, textAlign: 'center' }}>{t('restoreHint')}</div>
     </div>
   );
 }

@@ -27,6 +27,7 @@ export function defaultSettings(): Settings {
     weekStart: 1,
     onboarded: false,
     autoBackup: true,
+    billReminders: true,
   };
 }
 

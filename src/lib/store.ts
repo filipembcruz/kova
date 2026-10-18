@@ -2,16 +2,20 @@ import { useSyncExternalStore, useMemo } from 'react';
 import type { State } from './types';
 import { initialState, detectLang } from './defaults';
 import { balances, totalBalance, ensureRecurring, today } from './calc';
-import { writeAutoBackup } from '../native';
+import { writeAutoBackup, writePublicBackup } from '../native';
+import { syncReminders } from './reminders';
 
 const DB_NAME = 'kova';
 const STORE = 'kv';
 const KEY = 'state-v1';
 
-function idb(): Promise<IDBDatabase> {
+export function idb(): Promise<IDBDatabase> {
   return new Promise((res, rej) => {
-    const r = indexedDB.open(DB_NAME, 1);
-    r.onupgradeneeded = () => r.result.createObjectStore(STORE);
+    const r = indexedDB.open(DB_NAME, 2);
+    r.onupgradeneeded = () => {
+      if (!r.result.objectStoreNames.contains(STORE)) r.result.createObjectStore(STORE);
+      if (!r.result.objectStoreNames.contains('files')) r.result.createObjectStore('files');
+    };
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
   });
@@ -63,6 +67,7 @@ export async function loadState() {
 
 /** Daily housekeeping: create next occurrences of recurring items and write the automatic backup. */
 export async function maintenance() {
+  syncReminders(state);
   const next = ensureRecurring(state);
   if (next !== state) {
     state = next;
@@ -77,8 +82,10 @@ export async function maintenance() {
 
 export async function backupNow() {
   try {
-    const json = JSON.stringify({ app: 'kova', version: 1, exported: new Date().toISOString(), state });
+    const { buildBackup } = await import('./backup');
+    const json = await buildBackup(state);
     await writeAutoBackup(json, today());
+    await writePublicBackup(json);
     state = { ...state, settings: { ...state.settings, lastBackup: new Date().toISOString() } };
     emit();
     persist();
@@ -104,6 +111,7 @@ function migrate(s: State): State {
 }
 
 function persist() {
+  syncReminders(state);
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     idbSet(KEY, state).catch(() => {

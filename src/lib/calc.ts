@@ -4,7 +4,7 @@ import type { Account, Kind, State, Tx } from './types';
 export function balances(s: State, upTo = today()): Map<string, number> {
   const m = new Map<string, number>();
   for (const a of s.accounts) m.set(a.id, a.initial);
-  for (const t of s.txs) if (t.date <= upTo) m.set(t.accountId, (m.get(t.accountId) ?? 0) + (t.kind === 'income' ? t.amount : -t.amount));
+  for (const t of s.txs) if (t.date <= upTo || t.done) m.set(t.accountId, (m.get(t.accountId) ?? 0) + (t.kind === 'income' ? t.amount : -t.amount));
   for (const t of s.transfers) {
     if (t.date > upTo) continue;
     m.set(t.from, (m.get(t.from) ?? 0) - t.fromAmount);
@@ -155,7 +155,7 @@ export function evalExpr(expr: string): number | null {
   return Number.isFinite(r) ? Math.round(r * 100) / 100 : null;
 }
 
-export const isPlanned = (date: string) => date > today();
+export const isPlanned = (t: { date: string; done?: boolean }) => t.date > today() && !t.done;
 
 export function addPeriod(date: string, r: 'weekly' | 'monthly' | 'yearly', n = 1) {
   const d = parseIso(date);
@@ -181,7 +181,7 @@ export function ensureRecurring(s: State): State {
     let last = t;
     let guard = 0;
     while (last.date <= now && guard++ < 400) {
-      const next: Tx = { ...last, id: uid(), date: addPeriod(last.date, t.repeat), created: new Date().toISOString() };
+      const next: Tx = { ...last, id: uid(), date: addPeriod(last.date, t.repeat), created: new Date().toISOString(), done: undefined, attachments: undefined };
       add.push(next);
       last = next;
     }

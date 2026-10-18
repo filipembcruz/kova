@@ -162,7 +162,6 @@ function KindView({ kind }: { kind: Kind }) {
     <>
       <div className="paper">
         <GranPicker period={period} setPeriod={(p) => { setPeriod(p); setSel(null); }} />
-        <PeriodNav label={periodLabel(period, locale)} onPrev={() => setPeriod(shiftPeriod(period, -1, s.settings.weekStart))} onNext={() => setPeriod(shiftPeriod(period, 1, s.settings.weekStart))} />
         {rows.length === 0 ? (
           <Empty title={t('noData')} />
         ) : (

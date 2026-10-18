@@ -1,23 +1,55 @@
-import { useMemo, useState } from 'react';
-import { PiBackspaceBold, PiCheckBold, PiTrashBold, PiCalendarBlankBold, PiHashBold, PiArrowDownBold, PiPlusBold } from 'react-icons/pi';
-import type { Kind, Repeat, Tx, Transfer } from '../lib/types';
+import { useEffect, useMemo, useState } from 'react';
+import { PiBackspaceBold, PiCheckBold, PiTrashBold, PiCalendarBlankBold, PiHashBold, PiArrowDownBold, PiPlusBold, PiPaperclipBold, PiFilePdfDuotone, PiXBold, PiShareNetworkBold, PiBellRingingBold } from 'react-icons/pi';
+import type { Attachment, Kind, Repeat, Tx, Transfer } from '../lib/types';
 import { getState, setState, useStore } from '../lib/store';
-import { accountsSorted, addDays, evalExpr, today, toBase, uid, rate } from '../lib/calc';
+import { accountsSorted, addDays, evalExpr, today, toBase, uid, rate, parseIso } from '../lib/calc';
 import { useT } from '../i18n';
-import { Bubble, Seg, Sheet, confirmDialog } from './ui';
+import { Bubble, Seg, Sheet, Switch, confirmDialog } from './ui';
 import { openOverlay, toast } from '../lib/nav';
 import { money } from '../lib/format';
-import { tap } from '../native';
+import { tap, pickFile, openBlob, notificationsAllowed } from '../native';
+import { pickDate } from './Pickers';
+import { putFile, getFile, deleteFile, compressImage, blobToBase64 } from '../lib/files';
 
 type Mode = Kind | 'transfer';
 
-export function openTxEditor(opts: { tx?: Tx; transfer?: Transfer; kind?: Mode; accountId?: string; categoryId?: string } = {}) {
+export function openTxEditor(opts: { tx?: Tx; transfer?: Transfer; kind?: Mode; accountId?: string; categoryId?: string; repeat?: Repeat; date?: string } = {}) {
   openOverlay((close) => <TxEditor {...opts} close={close} />);
 }
 
 const fmtExpr = (cents: number) => (cents / 100).toFixed(2).replace(/\.00$/, '').replace('.', ',');
 
-function TxEditor({ tx, transfer, kind, accountId, categoryId, close }: { tx?: Tx; transfer?: Transfer; kind?: Mode; accountId?: string; categoryId?: string; close: () => void }) {
+export function AttachmentThumb({ att, onRemove }: { att: Attachment; onRemove?: () => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let u: string | null = null;
+    if (att.type.startsWith('image/')) getFile(att.id).then((b) => { if (b) { u = URL.createObjectURL(b); setUrl(u); } });
+    return () => { if (u) URL.revokeObjectURL(u); };
+  }, [att.id]);
+  return (
+    <button className="att" onClick={() => viewAttachment(att)}>
+      {url ? <img src={url} alt={att.name} /> : <div style={{ display: 'grid', placeItems: 'center', gap: 2, padding: 4 }}><PiFilePdfDuotone /><span style={{ fontSize: 10, overflow: 'hidden', maxWidth: 66, whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{att.name}</span></div>}
+      {onRemove && <span className="x" role="button" onClick={(e) => { e.stopPropagation(); onRemove(); }}><PiXBold /></span>}
+    </button>
+  );
+}
+
+export async function viewAttachment(att: Attachment) {
+  const blob = await getFile(att.id);
+  if (!blob) return;
+  if (att.type.startsWith('image/')) {
+    const url = URL.createObjectURL(blob);
+    openOverlay(() => (
+      <Sheet title={att.name} actions={<button className="icon-btn" onClick={() => openBlob(blob, att.name, () => blobToBase64(blob))} aria-label="share"><PiShareNetworkBold /></button>}>
+        <div className="sheet-b viewer"><img src={url} alt={att.name} /></div>
+      </Sheet>
+    ));
+    return;
+  }
+  await openBlob(blob, att.name, () => blobToBase64(blob));
+}
+
+function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: date0, close }: { tx?: Tx; transfer?: Transfer; kind?: Mode; accountId?: string; categoryId?: string; repeat?: Repeat; date?: string; close: () => void }) {
   const s = useStore();
   const { t, locale } = useT();
   const accounts = accountsSorted(s.accounts).filter((a) => !a.archived || a.id === tx?.accountId || a.id === transfer?.from || a.id === transfer?.to);
@@ -29,10 +61,13 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, close }: { tx?: T
   const [toAcc, setToAcc] = useState(transfer?.to ?? accounts.find((a) => a.id !== defaultAcc)?.id ?? '');
   const [toExpr, setToExpr] = useState(transfer && transfer.toAmount !== transfer.fromAmount ? fmtExpr(transfer.toAmount) : '');
   const [cat, setCat] = useState(tx?.categoryId ?? categoryId ?? '');
-  const [date, setDate] = useState(tx?.date ?? transfer?.date ?? today());
+  const [date, setDate] = useState(tx?.date ?? transfer?.date ?? date0 ?? today());
+  const [done, setDone] = useState(!!tx?.done);
   const [note, setNote] = useState(tx?.note ?? transfer?.note ?? '');
   const [tags, setTags] = useState<string[]>(tx?.tags ?? []);
-  const [rep, setRep] = useState<Repeat | ''>(tx?.repeat ?? '');
+  const [rep, setRep] = useState<Repeat | ''>(tx?.repeat ?? repeat ?? '');
+  const [remind, setRemind] = useState<number>(tx?.remind ?? (repeat ? 1 : -1));
+  const [atts, setAtts] = useState<Attachment[]>(tx?.attachments ?? []);
   const [tagInput, setTagInput] = useState('');
   const [typing, setTyping] = useState(false);
   const [editingTo, setEditingTo] = useState(false);
@@ -45,6 +80,7 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, close }: { tx?: T
   const crossCurrency = mode === 'transfer' && toAccount && account && toAccount.currency !== account.currency;
   const autoTo = crossCurrency ? Math.round((cents * rate(s, cur)) / rate(s, toAccount!.currency)) : cents;
   const toCents = crossCurrency && toExpr ? Math.round((evalExpr(toExpr) ?? 0) * 100) : autoTo;
+  const future = date > today();
 
   const cats = s.categories.filter((c) => c.kind === mode && (!c.archived || c.id === cat)).sort((a, b) => a.order - b.order);
   const allTags = useMemo(() => {
@@ -79,7 +115,16 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, close }: { tx?: T
     setter(curExpr === '0' ? k : curExpr + k);
   };
 
-  const save = () => {
+  const addAttachment = async () => {
+    const f = await pickFile('image/*,application/pdf');
+    if (!f) return;
+    const blob = await compressImage(f);
+    const att: Attachment = { id: 'att-' + uid(), name: f.name || 'file', type: blob.type || f.type || 'application/octet-stream', size: blob.size };
+    await putFile(att.id, blob);
+    setAtts((a) => [...a, att]);
+  };
+
+  const save = async () => {
     if (!cents || cents <= 0) return toast(t('enterAmount'));
     if (mode === 'transfer') {
       if (!toAcc || toAcc === acc) return toast(t('sameAccount'));
@@ -101,16 +146,19 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, close }: { tx?: T
         id: tx?.id ?? uid(), kind: mode, accountId: acc, categoryId: cat, amount: cents, base,
         date, note: note.trim(), tags, created: tx?.created ?? new Date().toISOString(),
       };
-      if (rep) { nt.repeat = rep; nt.series = tx?.series ?? uid(); }
+      if (future && done) nt.done = true;
+      if (atts.length) nt.attachments = atts;
+      if (rep) { nt.repeat = rep; nt.series = tx?.series ?? uid(); if (remind >= 0) nt.remind = remind; }
       else if (tx?.series) nt.series = tx.series;
+      for (const old of tx?.attachments ?? []) if (!atts.some((a) => a.id === old.id)) deleteFile(old.id);
+      if (rep && remind >= 0) notificationsAllowed(true);
       const stopSeries = !rep && tx?.repeat && tx.series;
       setState((st) => {
         let txs = tx ? st.txs.map((x) => (x.id === nt.id ? nt : x)) : [nt, ...st.txs];
         if (stopSeries) {
           const now = today();
-          txs = txs.filter((x) => x.id === nt.id || x.series !== tx!.series || x.date <= now).map((x) => (x.series === tx!.series ? { ...x, repeat: undefined } : x));
+          txs = txs.filter((x) => x.id === nt.id || x.series !== tx!.series || x.date <= now).map((x) => (x.series === tx!.series ? { ...x, repeat: undefined, remind: undefined } : x));
         } else if (rep && tx?.series) {
-          // newer planned occurrences follow the edited one
           txs = txs.filter((x) => x.id === nt.id || x.series !== tx.series || x.date <= nt.date || x.date <= today());
         }
         txs = [...txs].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.created < b.created ? 1 : -1));
@@ -123,9 +171,9 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, close }: { tx?: T
 
   const remove = async () => {
     if (!(await confirmDialog(t('confirmDelete'), t('delete'), t('cancel')))) return;
+    for (const a of tx?.attachments ?? []) deleteFile(a.id);
     setState((st) => {
       let txs = tx ? st.txs.filter((x) => x.id !== tx.id) : st.txs;
-      // deleting the latest occurrence of a recurring item stops the series
       if (tx?.series && !txs.some((x) => x.series === tx.series && x.date >= tx.date)) {
         txs = txs.map((x) => (x.series === tx.series ? { ...x, repeat: undefined } : x));
       }
@@ -136,23 +184,30 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, close }: { tx?: T
   };
 
   const addTag = (g: string) => {
-    const v = g.trim();
+    const v = g.trim().replace(/^#/, '');
     if (v && !tags.includes(v)) setTags([...tags, v]);
     setTagInput('');
+  };
+
+  const chooseDate = async () => {
+    const d = await pickDate(date, t('date'));
+    if (d) setDate(d);
   };
 
   const keys = ['7', '8', '9', 'back', '÷', '4', '5', '6', '+', '×', '1', '2', '3', '-', 'ok', '00', '0', ',', '='];
   const display = editingTo ? toExpr : expr;
   const shown = money(editingTo ? toCents : cents, editingTo ? toAccount!.currency : cur, locale);
+  const quick = [addDays(today(), -1), today()];
+  const custom = !quick.includes(date);
+  const focus = { onFocus: () => setTyping(true), onBlur: () => setTimeout(() => setTyping(false), 150) };
+  const tagSuggestions = allTags.filter((g) => !tags.includes(g) && (!tagInput || g.toLowerCase().includes(tagInput.toLowerCase()))).slice(0, 10);
 
   return (
     <Sheet
       full
       title={tx || transfer ? t('editTransaction') : t('newTransaction')}
       actions={(tx || transfer) && (
-        <button className="icon-btn" style={{ color: 'var(--exp)' }} onClick={remove} aria-label="delete">
-          <PiTrashBold />
-        </button>
+        <button className="icon-btn" style={{ color: 'var(--exp)' }} onClick={remove} aria-label="delete"><PiTrashBold /></button>
       )}
     >
       <div className="sheet-b" style={{ paddingBottom: 12 }}>
@@ -169,45 +224,45 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, close }: { tx?: T
 
         <div className="amount-box" onClick={() => { setTyping(false); setEditingTo(false); (document.activeElement as HTMLElement)?.blur?.(); }}>
           <div className="cur">{editingTo ? `${t('received')} · ${toAccount?.currency}` : `${t('amount')} · ${cur}`}</div>
-          <div className="val" style={{ color: mode === 'income' ? 'var(--inc)' : mode === 'expense' ? 'var(--ink)' : 'var(--blue)' }}>{shown}</div>
+          <div className="val" style={{ color: mode === 'income' ? 'var(--inc)' : mode === 'expense' ? 'var(--ink)' : 'var(--xfer)' }}>{shown}</div>
           <div className="expr">{/[+\-×÷]/.test(display) ? display : ' '}</div>
         </div>
 
-        <div className="small muted" style={{ fontWeight: 600, margin: '0 4px 8px' }}>{mode === 'transfer' ? t('fromAccount') : t('account')}</div>
-        <div className="pills" style={{ marginBottom: 14 }}>
+        <div className="label">{mode === 'transfer' ? t('fromAccount') : t('account')}</div>
+        <div className="pills">
           {accounts.map((a) => (
             <button key={a.id} className={'pill' + (acc === a.id ? ' on' : '')} onClick={() => setAcc(a.id)}>
-              <Bubble icon={a.icon} color={a.color} size={26} round /> {a.name}
+              <Bubble icon={a.icon} color={a.color} size={26} /> {a.name}
             </button>
           ))}
         </div>
 
         {mode === 'transfer' ? (
           <>
-            <div style={{ display: 'grid', placeItems: 'center', margin: '-4px 0 6px', color: 'var(--muted)' }}><PiArrowDownBold size={20} /></div>
-            <div className="small muted" style={{ fontWeight: 600, margin: '0 4px 8px' }}>{t('toAccount')}</div>
-            <div className="pills" style={{ marginBottom: 14 }}>
+            <div style={{ display: 'grid', placeItems: 'center', margin: '6px 0 0', color: 'var(--muted)' }}><PiArrowDownBold size={20} /></div>
+            <div className="label" style={{ marginTop: 0 }}>{t('toAccount')}</div>
+            <div className="pills" style={{ marginBottom: 10 }}>
               {accounts.filter((a) => a.id !== acc).map((a) => (
                 <button key={a.id} className={'pill' + (toAcc === a.id ? ' on' : '')} onClick={() => setToAcc(a.id)}>
-                  <Bubble icon={a.icon} color={a.color} size={26} round /> {a.name}
+                  <Bubble icon={a.icon} color={a.color} size={26} /> {a.name}
                 </button>
               ))}
             </div>
             {crossCurrency && (
-              <button className="field" style={{ width: '100%', textAlign: 'left', outline: editingTo ? '2px solid var(--primary)' : 'none' }} onClick={() => { setEditingTo(true); if (!toExpr) setToExpr(fmtExpr(autoTo)); }}>
+              <button className="field" style={{ width: '100%', textAlign: 'left', outline: editingTo ? '2px solid var(--brand)' : 'none' }} onClick={() => { setEditingTo(true); if (!toExpr) setToExpr(fmtExpr(autoTo)); }}>
                 <span>{t('received')} ({toAccount!.currency})</span>
-                <b style={{ fontSize: 18 }}>{money(toCents, toAccount!.currency, locale)}</b>
+                <b className="num" style={{ fontSize: 20 }}>{money(toCents, toAccount!.currency, locale)}</b>
                 <div className="small muted">1 {cur} = {(toCents / Math.max(cents, 1)).toFixed(4)} {toAccount!.currency}</div>
               </button>
             )}
           </>
         ) : (
           <>
-            <div className="small muted" style={{ fontWeight: 600, margin: '0 4px 10px' }}>{t('category')}</div>
-            <div className="cgrid" style={{ marginBottom: 18 }}>
+            <div className="label">{t('category')}</div>
+            <div className="cgrid picker" style={{ marginBottom: 6 }}>
               {cats.map((c) => (
                 <button key={c.id} className={'c' + (cat === c.id ? ' on' : '')} onClick={() => { tap(); setCat(c.id); }}>
-                  <Bubble icon={c.icon} color={c.color} size={54} round />
+                  <Bubble icon={c.icon} color={c.color} size={50} solid={cat === c.id} />
                   <span className="nm">{c.name}</span>
                 </button>
               ))}
@@ -215,74 +270,102 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, close }: { tx?: T
           </>
         )}
 
-        <div className="pills" style={{ marginBottom: 12 }}>
-          {[today(), addDays(today(), -1)].map((d, i) => (
-            <button key={d} className={'pill' + (date === d ? ' on' : '')} onClick={() => setDate(d)}>{i === 0 ? t('today') : t('yesterday')}</button>
+        <div className="label">{t('date')}</div>
+        <div className="pills">
+          {quick.map((d, i) => (
+            <button key={d} className={'pill text' + (date === d ? ' on' : '')} onClick={() => setDate(d)}>{i === 0 ? t('yesterday') : t('today')}</button>
           ))}
-          <label className={'pill' + (date !== today() && date !== addDays(today(), -1) ? ' on' : '')} style={{ position: 'relative' }}>
-            <PiCalendarBlankBold />
-            {new Date(date + 'T12:00').toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })}
-            <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} style={{ position: 'absolute', inset: 0, opacity: 0 }} />
-          </label>
+          <button className={'pill text' + (custom ? ' on' : '')} onClick={chooseDate}>
+            <PiCalendarBlankBold /> {custom ? parseIso(date).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' }) : t('otherDate')}
+          </button>
         </div>
+        {future && (
+          <div className="paper" style={{ padding: '10px 14px', margin: '8px 0 0' }}>
+            <div className="row">
+              <span className="tag plan">{t('planned')}</span>
+              <span className="small muted grow">{done ? t('countsNow') : t('plannedHint')}</span>
+            </div>
+            {mode !== 'transfer' && (
+              <div className="row" style={{ marginTop: 10 }}>
+                <b className="grow" style={{ fontWeight: 600 }}>{mode === 'income' ? t('alreadyReceived') : t('alreadyPaid')}</b>
+                <Switch on={done} onChange={setDone} />
+              </div>
+            )}
+          </div>
+        )}
 
-        {date > today() && (
-          <div className="row" style={{ margin: '-4px 4px 12px', gap: 8 }}>
-            <span className="tag plan">{t('planned')}</span>
-            <span className="small muted grow">{t('plannedHint')}</span>
-            {tx && <button className="mini-btn" onClick={() => setDate(today())}>{t('confirmNow')}</button>}
-          </div>
-        )}
         {mode !== 'transfer' && (
-          <div className="pills" style={{ marginBottom: 12 }}>
-            {(['', 'monthly', 'weekly', 'yearly'] as const).map((r) => (
-              <button key={r || 'none'} className={'pill text' + (rep === r ? ' on' : '')} onClick={() => setRep(r)}>
-                {r === '' ? t('noRepeat') : t(r)}
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="label">{t('repeat')}</div>
+            <div className="pills">
+              {(['', 'monthly', 'weekly', 'yearly'] as const).map((r) => (
+                <button key={r || 'none'} className={'pill text' + (rep === r ? ' on' : '')} onClick={() => { setRep(r); if (r && remind < 0) setRemind(1); }}>
+                  {r === '' ? t('noRepeat') : t(r)}
+                </button>
+              ))}
+            </div>
+            {rep && (
+              <>
+                <div className="label"><PiBellRingingBold style={{ verticalAlign: -2 }} /> {t('reminder')}</div>
+                <div className="pills">
+                  {[-1, 0, 1, 3, 7].map((d) => (
+                    <button key={d} className={'pill text' + (remind === d ? ' on' : '')} onClick={() => setRemind(d)}>
+                      {d < 0 ? t('noReminder') : d === 0 ? t('onTheDay') : t('daysBefore', { n: String(d) })}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </>
         )}
+
+        <div style={{ height: 12 }} />
         <label className="field">
           <span>{t('note')}</span>
-          <input value={note} placeholder={t('notePh')} onFocus={() => setTyping(true)} onBlur={() => setTimeout(() => setTyping(false), 120)} onChange={(e) => setNote(e.target.value)} />
+          <input value={note} placeholder={t('notePh')} {...focus} onChange={(e) => setNote(e.target.value)} />
         </label>
 
         {mode !== 'transfer' && (
           <div className="field">
             <span>{t('tags')}</span>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
               {tags.map((g) => (
-                <button key={g} className="tag lilac" onClick={() => setTags(tags.filter((x) => x !== g))}><PiHashBold /> {g} ✕</button>
+                <button key={g} className="tag lilac" style={{ padding: '5px 10px' }} onClick={() => setTags(tags.filter((x) => x !== g))}><PiHashBold /> {g} <PiXBold /></button>
               ))}
-              <input
-                value={tagInput}
-                placeholder={t('addTag')}
-                style={{ flex: 1, minWidth: 100, fontSize: 14 }}
-                onFocus={() => setTyping(true)}
-                onBlur={() => setTimeout(() => setTyping(false), 120)}
-                onChange={(e) => setTagInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && addTag(tagInput)}
-              />
-              {tagInput && <button className="tag" onClick={() => addTag(tagInput)}><PiPlusBold /> {tagInput}</button>}
             </div>
-            {allTags.filter((g) => !tags.includes(g) && (!tagInput || g.toLowerCase().includes(tagInput.toLowerCase()))).length > 0 && (
+            <div className="row" style={{ gap: 8, marginTop: 6 }}>
+              <input value={tagInput} placeholder={t('addTag')} style={{ flex: 1, fontSize: 16 }} {...focus}
+                onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTag(tagInput)} />
+              {tagInput && <button className="mini-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => addTag(tagInput)}><PiPlusBold /> {t('addTag')}</button>}
+            </div>
+            {tagSuggestions.length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                {allTags.filter((g) => !tags.includes(g) && (!tagInput || g.toLowerCase().includes(tagInput.toLowerCase()))).slice(0, 8).map((g) => (
-                  <button key={g} className="tag" onMouseDown={(e) => e.preventDefault()} onClick={() => addTag(g)}>#{g}</button>
+                {tagSuggestions.map((g) => (
+                  <button key={g} className="tag" style={{ padding: '5px 10px' }} onMouseDown={(e) => e.preventDefault()} onClick={() => addTag(g)}>#{g}</button>
                 ))}
               </div>
             )}
           </div>
         )}
+
+        {mode !== 'transfer' && (
+          <>
+            <div className="label"><PiPaperclipBold style={{ verticalAlign: -2 }} /> {t('attachments')}</div>
+            <div className="atts">
+              {atts.map((a) => <AttachmentThumb key={a.id} att={a} onRemove={() => setAtts(atts.filter((x) => x.id !== a.id))} />)}
+              <button className="att add" onClick={addAttachment}><PiPlusBold /></button>
+            </div>
+          </>
+        )}
       </div>
 
       {!typing && (
-        <div className="keypad" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+        <div className="keypad">
           {keys.map((k) =>
             k === 'ok' ? (
               <button key={k} className="ok" style={{ gridRow: 'span 2' }} onClick={save} aria-label="save"><PiCheckBold /></button>
             ) : (
-              <button key={k} className={/[+\-×÷=]/.test(k) || k === 'back' ? 'op' : ''} onClick={() => press(k === '-' ? '-' : k)}>
+              <button key={k} className={/[+\-×÷=]/.test(k) || k === 'back' ? 'op' : ''} onClick={() => press(k)}>
                 {k === 'back' ? <PiBackspaceBold /> : k === '-' ? '−' : k}
               </button>
             ),
@@ -291,10 +374,9 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, close }: { tx?: T
       )}
       {typing && (
         <div className="sheet-f">
-          <button className="btn grad" onMouseDown={(e) => e.preventDefault()} onClick={save}><PiCheckBold /> {t('save')}</button>
+          <button className="btn primary" onMouseDown={(e) => e.preventDefault()} onClick={save}><PiCheckBold /> {t('save')}</button>
         </div>
       )}
     </Sheet>
   );
 }
-

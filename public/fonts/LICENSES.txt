@@ -1,2 +1,1 @@
-Inter — SIL Open Font License 1.1, Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/inter).
-TeX Gyre Adventor — GUST Font License, Copyright (c) 2006-2009 B. Jackowski and J. M. Nowacki (https://www.gust.org.pl/projects/e-foundry/tex-gyre).
+Inter and Inter Display — SIL Open Font License 1.1, Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/inter).

@@ -173,13 +173,15 @@ export function PaceBars({ days, avg, fmt, color = '#7C5CFF' }: { days: { label:
 }
 
 /** Spending pace: one bar per day (or month), dashed average line, the peak labelled. Bars never collapse into dots. */
-export function PaceChart({ data, avg, fmt, color }: { data: { label: string; value: number; key: string; today?: boolean }[]; avg: number; fmt: (v: number) => string; color: string }) {
-  const W = 340, H = 180, top = 30, bottom = 22;
+export function PaceChart({ data, avg, fmt, color }: { data: { label: string; value: number; key: string; today?: boolean; full?: string }[]; avg: number; fmt: (v: number) => string; color: string }) {
+  const [sel, setSel] = useState<number | null>(null);
+  const W = 340, H = 190, top = 40, bottom = 22;
   const plotH = H - top - bottom;
   const max = Math.max(1, avg * 1.15, ...data.map((d) => d.value));
   const gw = W / Math.max(data.length, 1);
   const bw = Math.max(3, Math.min(30, gw * 0.62));
-  const peak = data.reduce((m, d, i) => (d.value > data[m].value ? i : m), 0);
+  const peakI = data.reduce((m, d, i) => (d.value > data[m].value ? i : m), 0);
+  const peak = sel ?? peakI;
   const every = data.length > 16 ? Math.ceil(data.length / 8) : 1;
   const avgY = top + plotH - (avg / max) * plotH;
   const ti = data.findIndex((d) => d.today);
@@ -191,15 +193,16 @@ export function PaceChart({ data, avg, fmt, color }: { data: { label: string; va
         const h = d.value > 0 ? Math.max((d.value / max) * plotH, 3) : 0;
         const x = i * gw + (gw - bw) / 2;
         const r = Math.min(bw / 2, 6);
-        const isPeak = i === peak && d.value > 0;
+        const isPeak = i === peak && (d.value > 0 || sel === i);
         return (
-          <g key={d.key}>
+          <g key={d.key} onClick={() => setSel(i === sel ? null : i)} style={{ cursor: 'pointer' }}>
+            <rect x={i * gw} y={0} width={gw} height={H} fill="transparent" />
             {h > 0 && <path d={`M${x},${top + plotH} V${top + plotH - h + r} Q${x},${top + plotH - h} ${x + r},${top + plotH - h} H${x + bw - r} Q${x + bw},${top + plotH - h} ${x + bw},${top + plotH - h + r} V${top + plotH} Z`} fill={color} opacity={isPeak ? 1 : 0.45} />}
             {showLabel(i) && (
               <text x={x + bw / 2} y={H - 5} textAnchor="middle" fontSize="10.5" fill={d.today ? 'var(--ink)' : 'var(--muted)'} fontWeight={d.today ? 700 : 500}>{d.label}</text>
             )}
             {isPeak && (() => {
-              const txt = fmt(d.value);
+              const txt = (sel === i && d.full ? d.full + ' · ' : '') + fmt(d.value);
               const w = txt.length * 6.2 + 14;
               const cx = Math.min(Math.max(x + bw / 2, w / 2), W - w / 2);
               const y = Math.max(top + plotH - h - 25, 0);

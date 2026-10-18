@@ -1,5 +1,5 @@
 // Local stubs used only for browser previews when @capacitor packages are not installed.
-export const registerPlugin = <T,>(_: string): T => ({ set: async () => {} }) as unknown as T;
+export const registerPlugin = <T,>(_: string): T => ({ set: async () => {}, getInsets: async () => ({}), addListener: async () => ({ remove: () => {} }) }) as unknown as T;
 export const Capacitor = { isNativePlatform: () => false, getPlatform: () => 'web' };
 export const Filesystem = {
   writeFile: async (_: unknown) => ({ uri: '' }),
@@ -15,3 +15,11 @@ export const Style = { Dark: 'DARK', Light: 'LIGHT' } as const;
 export const Haptics = { impact: async (_: unknown) => {} };
 export const ImpactStyle = { Light: 'LIGHT' } as const;
 export const Keyboard = { addListener: (_: string, __: (i: { keyboardHeight: number }) => void) => ({ remove: () => {} }) };
+export const App = { addListener: (_: string, __: () => void) => ({ remove: () => {} }), minimizeApp: async () => {} };
+export const LocalNotifications = {
+  checkPermissions: async () => ({ display: 'denied' as string }),
+  requestPermissions: async () => ({ display: 'denied' as string }),
+  getPending: async () => ({ notifications: [] as { id: number }[] }),
+  cancel: async (_: unknown) => {},
+  schedule: async (_: unknown) => {},
+};

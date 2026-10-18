@@ -132,3 +132,14 @@ export function useToast() {
     () => toastMsg,
   );
 }
+
+/** Android back button: close the top sheet, else go back a page, else leave the app in the background. */
+export function handleBack(minimize: () => void) {
+  if (overlays.some((o) => !o.closing)) { closeOverlay(); return; }
+  if (route.path !== '/') {
+    if (depth() > 0) history.back();
+    else navigate('/', true);
+    return;
+  }
+  minimize();
+}

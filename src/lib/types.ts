@@ -39,6 +39,16 @@ export interface Tx {
   created: string;
   repeat?: Repeat; // recurring series: next occurrence is created automatically
   series?: string;
+  done?: boolean; // future-dated but already paid/received: counts in the balance now
+  remind?: number; // days before the due date to notify (recurring bills); undefined = no reminder
+  attachments?: Attachment[];
+}
+
+export interface Attachment {
+  id: string; // key of the file in IndexedDB
+  name: string;
+  type: string;
+  size: number;
 }
 
 export type Repeat = 'weekly' | 'monthly' | 'yearly';
@@ -69,6 +79,7 @@ export interface Settings {
   onboarded: boolean;
   autoBackup: boolean;
   lastBackup?: string;
+  billReminders: boolean;
 }
 
 export interface State {

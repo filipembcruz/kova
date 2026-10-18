@@ -10,7 +10,7 @@ const dev = process.argv.includes('--dev');
 // When @capacitor packages are not installed (e.g. quick browser preview), use stubs.
 let hasCap = true;
 try { require.resolve('@capacitor/core'); } catch { hasCap = false; }
-const alias = hasCap ? {} : Object.fromEntries(['core', 'filesystem', 'share', 'keyboard', 'haptics'].map((p) => [`@capacitor/${p}`, './stubs/capacitor.ts']));
+const alias = hasCap ? {} : Object.fromEntries(['core', 'filesystem', 'share', 'keyboard', 'haptics', 'app', 'local-notifications'].map((p) => [`@capacitor/${p}`, './stubs/capacitor.ts']));
 
 rmSync('dist', { recursive: true, force: true });
 mkdirSync('dist', { recursive: true });

@@ -1,23 +1,11 @@
 import type { Category, State, Tx } from './types';
-import { addDays, balances, fold, iso, pad, parseIso, today, totalBalance } from './calc';
+import { addDays, balances, fold, iso, pad, parseIso, today, totalBalance, shiftPeriod, Period } from './calc';
 
 export type RGran = 'month' | 'quarter' | 'year';
-export interface RPeriod { gran: RGran; start: string; end: string }
+export type RPeriod = Period;
 
-export function rPeriod(gran: RGran, anchor = today()): RPeriod {
-  const d = parseIso(anchor);
-  if (gran === 'month') return { gran, start: iso(new Date(d.getFullYear(), d.getMonth(), 1)), end: iso(new Date(d.getFullYear(), d.getMonth() + 1, 0)) };
-  if (gran === 'quarter') {
-    const q = Math.floor(d.getMonth() / 3) * 3;
-    return { gran, start: iso(new Date(d.getFullYear(), q, 1)), end: iso(new Date(d.getFullYear(), q + 3, 0)) };
-  }
-  return { gran, start: `${d.getFullYear()}-01-01`, end: `${d.getFullYear()}-12-31` };
-}
-
-export function rShift(p: RPeriod, dir: number): RPeriod {
-  const d = parseIso(p.start);
-  const months = p.gran === 'month' ? 1 : p.gran === 'quarter' ? 3 : 12;
-  return rPeriod(p.gran, iso(new Date(d.getFullYear(), d.getMonth() + months * dir, 1)));
+export function rShift(p: Period, dir: number): Period {
+  return shiftPeriod(p, dir, 1);
 }
 
 const NON_ESSENTIAL = ['superfluo', 'lazer', 'restaurante', 'cafe', 'entretenimento', 'delivery', 'bar', 'hamburguer', 'lanche', 'ferias', 'viagem', 'viagens', 'presente', 'compras', 'shopping', 'games', 'jogos', 'streaming', 'assinatura', 'leisure', 'restaurants', 'restaurant', 'coffee', 'gifts', 'travel', 'vacation', 'fun', 'entertainment', 'takeout'];
@@ -34,10 +22,15 @@ function sumBy<T>(arr: T[], f: (x: T) => number) {
   return arr.reduce((a, x) => a + f(x), 0);
 }
 
-export interface Insight { tone: 'good' | 'warn' | 'info'; icon: string; title: string; text: string }
+export type InsightKey = 'saved' | 'spent' | 'projection' | 'catUp' | 'budget' | 'nonEss' | 'concentration' | 'fixed' | 'worth';
+export interface Insight { tone: 'good' | 'warn' | 'info'; icon: string; title: string; text: string; key: InsightKey; catId?: string }
 
 export interface Report {
-  period: RPeriod;
+  period: Period;
+  histLabels: string[];
+  hist: Map<string, number>[];
+  neList: { tx: Tx; reason: 'category' | 'keyword'; word?: string }[];
+  catPrevDiff: { id: string; cat?: Category; now: number; prev: number }[];
   income: number;
   expense: number;
   saved: number;
@@ -50,7 +43,7 @@ export interface Report {
   topTx: Tx[];
   nonEssential: number;
   nonEssentialCats: { id: string; cat?: Category; v: number }[];
-  fixed: { name: string; avg: number; months: number; categoryId: string }[];
+  fixed: { name: string; avg: number; months: number; categoryId: string; txs: Tx[] }[];
   months: { key: string; income: number; expense: number }[];
   daily: number;
   biggestDay: { date: string; v: number } | null;
@@ -59,7 +52,7 @@ export interface Report {
   insights: Insight[];
 }
 
-export function buildReport(s: State, p: RPeriod, t: (k: any, v?: Record<string, string>) => string, fmt: (c: number) => string): Report {
+export function buildReport(s: State, p: Period, t: (k: any, v?: Record<string, string>) => string, fmt: (c: number) => string): Report {
   const inP = (x: Tx, q: { start: string; end: string }) => x.date >= q.start && x.date <= q.end;
   const catById = new Map(s.categories.map((c) => [c.id, c]));
   const txs = s.txs.filter((x) => inP(x, p));
@@ -74,9 +67,11 @@ export function buildReport(s: State, p: RPeriod, t: (k: any, v?: Record<string,
 
   // average of the 6 previous periods, per category
   const hist: Map<string, number>[] = [];
+  const histLabels: string[] = [];
   let hp = p;
   for (let i = 0; i < 6; i++) {
     hp = rShift(hp, -1);
+    histLabels.push(hp.start);
     const m = new Map<string, number>();
     for (const x of s.txs) if (x.kind === 'expense' && inP(x, hp)) m.set(x.categoryId, (m.get(x.categoryId) ?? 0) + x.base);
     hist.push(m);
@@ -100,13 +95,17 @@ export function buildReport(s: State, p: RPeriod, t: (k: any, v?: Record<string,
 
   // non-essential spending: by category flag, plus clearly discretionary notes in essential categories
   const neCats = new Map<string, number>();
+  const neList: Report['neList'] = [];
   let nonEssential = 0;
   for (const x of exp) {
     const c = catById.get(x.categoryId);
     const note = fold(' ' + x.note + ' ');
-    if (!isEssential(c) || NON_ESSENTIAL_NOTE.some((w) => note.includes(w))) {
+    const word = NON_ESSENTIAL_NOTE.find((w) => note.includes(w));
+    const byCat = !isEssential(c);
+    if (byCat || word) {
       nonEssential += x.base;
       neCats.set(x.categoryId, (neCats.get(x.categoryId) ?? 0) + x.base);
+      neList.push({ tx: x, reason: byCat ? 'category' : 'keyword', word: word?.trim() });
     }
   }
   const nonEssentialCats = [...neCats.entries()].map(([id, v]) => ({ id, cat: catById.get(id), v })).sort((a, b) => b.v - a.v);
@@ -115,26 +114,28 @@ export function buildReport(s: State, p: RPeriod, t: (k: any, v?: Record<string,
   const endMonth = parseIso(p.end > today() ? today() : p.end);
   const last4: string[] = [];
   for (let i = 0; i < 4; i++) { const d = new Date(endMonth.getFullYear(), endMonth.getMonth() - i, 1); last4.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`); }
-  const groups = new Map<string, { months: Set<string>; vals: number[]; name: string; categoryId: string }>();
+  const groups = new Map<string, { months: Set<string>; vals: number[]; name: string; categoryId: string; txs: Tx[] }>();
   for (const x of s.txs) {
     if (x.kind !== 'expense' || !x.note.trim() || !last4.includes(x.date.slice(0, 7))) continue;
     const k = x.categoryId + '|' + fold(x.note.trim());
-    const g = groups.get(k) ?? { months: new Set(), vals: [], name: x.note.trim(), categoryId: x.categoryId };
-    g.months.add(x.date.slice(0, 7)); g.vals.push(x.base);
+    const g = groups.get(k) ?? { months: new Set(), vals: [], name: x.note.trim(), categoryId: x.categoryId, txs: [] };
+    g.months.add(x.date.slice(0, 7)); g.vals.push(x.base); g.txs.push(x);
     groups.set(k, g);
   }
   const fixed = [...groups.values()].filter((g) => {
     if (g.months.size < 3) return false;
     const avg = sumBy(g.vals, (v) => v) / g.vals.length;
     return g.vals.every((v) => Math.abs(v - avg) <= avg * 0.35) && g.vals.length <= g.months.size * 2;
-  }).map((g) => ({ name: g.name, categoryId: g.categoryId, months: g.months.size, avg: Math.round(sumBy(g.vals, (v) => v) / g.vals.length) })).sort((a, b) => b.avg - a.avg).slice(0, 8);
+  }).map((g) => ({ name: g.name, categoryId: g.categoryId, txs: g.txs.sort((a, b) => (a.date < b.date ? 1 : -1)), months: g.months.size, avg: Math.round(sumBy(g.vals, (v) => v) / g.vals.length) })).sort((a, b) => b.avg - a.avg).slice(0, 8);
 
   // monthly breakdown (quarter / year)
   const months: Report['months'] = [];
-  if (p.gran !== 'month') {
+  const spanDays = Math.round((parseIso(p.end).getTime() - parseIso(p.start).getTime()) / 864e5) + 1;
+  if (spanDays > 45) {
     const d = parseIso(p.start);
-    const n = p.gran === 'quarter' ? 3 : 12;
-    for (let i = 0; i < n; i++) {
+    const e = parseIso(p.end);
+    const n = (e.getFullYear() - d.getFullYear()) * 12 + e.getMonth() - d.getMonth() + 1;
+    for (let i = 0; i < Math.min(n, 60); i++) {
       const m = new Date(d.getFullYear(), d.getMonth() + i, 1);
       const key = `${m.getFullYear()}-${pad(m.getMonth() + 1)}`;
       const mt = txs.filter((x) => x.date.startsWith(key));
@@ -152,46 +153,50 @@ export function buildReport(s: State, p: RPeriod, t: (k: any, v?: Record<string,
   for (const x of exp) dm.set(x.date, (dm.get(x.date) ?? 0) + x.base);
   const bd = [...dm.entries()].sort((a, b) => b[1] - a[1])[0];
   const isCurrent = p.start <= now && now <= p.end;
-  const projection = isCurrent ? Math.round(daily * totalDays) : null;
+  const projection = isCurrent && p.gran !== 'day' ? Math.round(daily * totalDays) : null;
 
   const netWorthEnd = totalBalance(s, balances(s, elapsedEnd));
   const netWorthStart = totalBalance(s, balances(s, addDays(p.start, -1)));
 
+  const pcm = new Map<string, number>();
+  for (const x of ptx) if (x.kind === 'expense') pcm.set(x.categoryId, (pcm.get(x.categoryId) ?? 0) + x.base);
+  const allIds = new Set([...cm.keys(), ...pcm.keys()]);
+  const catPrevDiff = [...allIds].map((id) => ({ id, cat: catById.get(id), now: cm.get(id)?.v ?? 0, prev: pcm.get(id) ?? 0 })).sort((a, b) => Math.abs(b.now - b.prev) - Math.abs(a.now - a.prev));
   const saved = income - expense;
   const rate = income ? (saved / income) * 100 : 0;
 
   // ---------- insights ----------
   const ins: Insight[] = [];
   if (income || expense) {
-    if (saved >= 0) ins.push({ tone: 'good', icon: 'piggy-bank', title: t('rSavedTitle', { v: fmt(saved) }), text: t('rSavedText', { r: String(Math.round(rate)) }) });
-    else ins.push({ tone: 'warn', icon: 'trend-down', title: t('rDeficitTitle', { v: fmt(-saved) }), text: t('rDeficitText') });
+    if (saved >= 0) ins.push({ key: 'saved', tone: 'good', icon: 'piggy-bank', title: t('rSavedTitle', { v: fmt(saved) }), text: t('rSavedText', { r: String(Math.round(rate)) }) });
+    else ins.push({ key: 'saved', tone: 'warn', icon: 'trend-down', title: t('rDeficitTitle', { v: fmt(-saved) }), text: t('rDeficitText') });
   }
   if (prev.expense > 0 && expense > 0 && !isCurrent) {
     const ch = ((expense - prev.expense) / prev.expense) * 100;
-    if (Math.abs(ch) >= 10) ins.push({ tone: ch > 0 ? 'warn' : 'good', icon: ch > 0 ? 'trend-up' : 'trend-down', title: t(ch > 0 ? 'rSpentMore' : 'rSpentLess', { p: String(Math.abs(Math.round(ch))) }), text: t('rVsPrev', { v: fmt(prev.expense) }) });
+    if (Math.abs(ch) >= 10) ins.push({ key: 'spent', tone: ch > 0 ? 'warn' : 'good', icon: ch > 0 ? 'trend-up' : 'trend-down', title: t(ch > 0 ? 'rSpentMore' : 'rSpentLess', { p: String(Math.abs(Math.round(ch))) }), text: t('rVsPrev', { v: fmt(prev.expense) }) });
   }
   if (projection !== null && prev.expense > 0 && days >= 5) {
-    ins.push({ tone: projection > prev.expense * 1.1 ? 'warn' : 'info', icon: 'chart-line-up', title: t('rProjection', { v: fmt(projection) }), text: t('rProjectionText', { d: fmt(Math.round(daily)) }) });
+    ins.push({ key: 'projection', tone: projection > prev.expense * 1.1 ? 'warn' : 'info', icon: 'chart-line-up', title: t('rProjection', { v: fmt(projection) }), text: t('rProjectionText', { d: fmt(Math.round(daily)) }) });
   }
   for (const c of cats.slice(0, 12)) {
     if (c.avg > 0 && c.v > c.avg * 1.3 && c.v - c.avg > Math.max(expense * 0.03, 5000)) {
-      ins.push({ tone: 'warn', icon: c.cat?.icon ?? 'warning', title: t('rCatUp', { c: c.cat?.name ?? '—', p: ((c.v - c.avg) / c.avg) * 100 > 300 ? '300+' : String(Math.round(((c.v - c.avg) / c.avg) * 100)) }), text: t('rCatUpText', { v: fmt(c.v), a: fmt(Math.round(c.avg)) }) });
+      ins.push({ key: 'catUp', catId: c.id, tone: 'warn', icon: c.cat?.icon ?? 'warning', title: t('rCatUp', { c: c.cat?.name ?? '—', p: ((c.v - c.avg) / c.avg) * 100 > 300 ? '300+' : String(Math.round(((c.v - c.avg) / c.avg) * 100)) }), text: t('rCatUpText', { v: fmt(c.v), a: fmt(Math.round(c.avg)) }) });
     }
   }
   if (p.gran === 'month') {
     for (const c of s.categories) {
       if (!c.budget) continue;
       const v = cm.get(c.id)?.v ?? 0;
-      if (v > c.budget) ins.push({ tone: 'warn', icon: c.icon, title: t('rOverBudget', { c: c.name }), text: t('rOverBudgetText', { v: fmt(v - c.budget), b: fmt(c.budget) }) });
+      if (v > c.budget) ins.push({ key: 'budget', catId: c.id, tone: 'warn', icon: c.icon, title: t('rOverBudget', { c: c.name }), text: t('rOverBudgetText', { v: fmt(v - c.budget), b: fmt(c.budget) }) });
     }
   }
   if (nonEssential > 0 && expense > 0) {
     const share = (nonEssential / expense) * 100;
-    ins.push({ tone: share > 30 ? 'warn' : 'info', icon: 'hamburger', title: t('rNonEss', { v: fmt(nonEssential), p: String(Math.round(share)) }), text: share > 30 ? t('rNonEssHigh') : t('rNonEssOk') });
+    ins.push({ key: 'nonEss', tone: share > 30 ? 'warn' : 'info', icon: 'hamburger', title: t('rNonEss', { v: fmt(nonEssential), p: String(Math.round(share)) }), text: share > 30 ? t('rNonEssHigh') : t('rNonEssOk') });
   }
-  if (cats[0] && cats[0].share >= 25) ins.push({ tone: 'info', icon: cats[0].cat?.icon ?? 'info', title: t('rConcentration', { c: cats[0].cat?.name ?? '—', p: String(Math.round(cats[0].share)) }), text: t('rConcentrationText') });
-  if (fixed.length) ins.push({ tone: 'info', icon: 'repeat', title: t('rFixed', { n: String(fixed.length), v: fmt(sumBy(fixed, (f) => f.avg)) }), text: t('rFixedText') });
-  if (netWorthEnd !== netWorthStart) ins.push({ tone: netWorthEnd >= netWorthStart ? 'good' : 'warn', icon: 'bank', title: t(netWorthEnd >= netWorthStart ? 'rWorthUp' : 'rWorthDown', { v: fmt(Math.abs(netWorthEnd - netWorthStart)) }), text: t('rWorthText', { v: fmt(netWorthEnd) }) });
+  if (cats[0] && cats[0].share >= 25) ins.push({ key: 'concentration', catId: cats[0].id, tone: 'info', icon: cats[0].cat?.icon ?? 'info', title: t('rConcentration', { c: cats[0].cat?.name ?? '—', p: String(Math.round(cats[0].share)) }), text: t('rConcentrationText') });
+  if (fixed.length) ins.push({ key: 'fixed', tone: 'info', icon: 'repeat', title: t('rFixed', { n: String(fixed.length), v: fmt(sumBy(fixed, (f) => f.avg)) }), text: t('rFixedText') });
+  if (netWorthEnd !== netWorthStart) ins.push({ key: 'worth', tone: netWorthEnd >= netWorthStart ? 'good' : 'warn', icon: 'bank', title: t(netWorthEnd >= netWorthStart ? 'rWorthUp' : 'rWorthDown', { v: fmt(Math.abs(netWorthEnd - netWorthStart)) }), text: t('rWorthText', { v: fmt(netWorthEnd) }) });
 
-  return { period: p, income, expense, saved, rate, prev, netWorthStart, netWorthEnd, cats, incomeCats, topTx, nonEssential, nonEssentialCats, fixed, months, daily, biggestDay: bd ? { date: bd[0], v: bd[1] } : null, projection, days, insights: ins };
+  return { period: p, histLabels, hist, neList, catPrevDiff, income, expense, saved, rate, prev, netWorthStart, netWorthEnd, cats, incomeCats, topTx, nonEssential, nonEssentialCats, fixed, months, daily, biggestDay: bd ? { date: bd[0], v: bd[1] } : null, projection, days, insights: ins };
 }

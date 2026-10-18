@@ -4,7 +4,7 @@ import { closeOverlay, openOverlay, useOverlays, useToast } from '../lib/nav';
 import { useStore } from '../lib/store';
 import { money } from '../lib/format';
 import { useT } from '../i18n';
-import { PiXBold, PiCaretLeftBold, PiCaretRightBold } from 'react-icons/pi';
+import { PiXBold, PiCaretLeftBold, PiCaretRightBold, PiCaretDownBold } from 'react-icons/pi';
 
 export function lighten(hex: string, amt = 0.25) {
   const n = parseInt(hex.slice(1), 16);
@@ -13,13 +13,10 @@ export function lighten(hex: string, amt = 0.25) {
   return `rgb(${r},${g},${b})`;
 }
 
-export function Bubble({ icon, color, size = 46, round = false }: { icon: string; color: string; size?: number; round?: boolean }) {
+export function Bubble({ icon, color, size = 46, solid = false }: { icon: string; color: string; size?: number; round?: boolean; solid?: boolean }) {
   const I = iconFor(icon);
   return (
-    <div
-      className="bubble"
-      style={{ width: size, height: size, borderRadius: round ? '50%' : '50%', background: color }}
-    >
+    <div className={'bubble' + (solid ? ' solid' : '')} style={{ width: size, height: size, ['--c' as any]: color }}>
       <I />
     </div>
   );
@@ -132,7 +129,7 @@ export function PeriodNav({ label, onPrev, onNext, nextDisabled, onLabel }: { la
   return (
     <div className="period-nav">
       <button className="arrow" onClick={onPrev} aria-label="prev"><PiCaretLeftBold /></button>
-      <b onClick={onLabel}>{label}</b>
+      <button className="lbl-btn" onClick={onLabel}>{label}{onLabel && <PiCaretDownBold />}</button>
       <button className="arrow" onClick={onNext} disabled={nextDisabled} aria-label="next"><PiCaretRightBold /></button>
     </div>
   );

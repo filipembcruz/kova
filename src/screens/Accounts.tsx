@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { PiPlusBold, PiClockCounterClockwiseBold, PiArrowsLeftRightBold, PiCaretDownBold, PiCaretUpBold, PiPencilSimpleBold } from 'react-icons/pi';
+import { PiPlusBold, PiClockCounterClockwiseBold, PiArrowsLeftRightBold, PiCaretDownBold, PiCaretUpBold, PiCheckBold, PiArrowsDownUpBold, PiDotsSixVerticalBold, PiHandGrabbingBold } from 'react-icons/pi';
 import { setState, useBalances, useStore } from '../lib/store';
 import { useT } from '../i18n';
 import { accountsSorted, toBase } from '../lib/calc';
@@ -8,6 +8,7 @@ import { Bubble } from '../components/ui';
 import { openAccountEditor } from '../components/Editors';
 import { openTxEditor } from '../components/TxEditor';
 import { navigate } from '../lib/nav';
+import { Sortable } from '../components/Sortable';
 
 export function Accounts() {
   const s = useStore();
@@ -24,22 +25,16 @@ export function Accounts() {
   const positive = active.filter((a) => a.includeInTotal).map((a) => ({ a, v: Math.max(toBase(s, bal.get(a.id) ?? 0, a.currency), 0) })).filter((p) => p.v > 0).sort((x, y) => y.v - x.v);
   const posTotal = positive.reduce((x, p) => x + p.v, 0) || 1;
 
-  const move = (id: string, dir: -1 | 1) => {
-    const ids = active.map((a) => a.id);
-    const i = ids.indexOf(id);
-    const j = i + dir;
-    if (j < 0 || j >= ids.length) return;
-    [ids[i], ids[j]] = [ids[j], ids[i]];
+  const commit = (ids: string[]) =>
     setState((st) => ({ ...st, accounts: st.accounts.map((a) => (ids.includes(a.id) ? { ...a, order: ids.indexOf(a.id) } : a)) }));
-  };
 
   const row = (id: string) => {
     const a = s.accounts.find((x) => x.id === id)!;
     const v = bal.get(a.id) ?? 0;
     const foreign = a.currency !== base;
     return (
-      <div className="row" key={a.id} style={{ gap: 4 }}>
-        <button className="item grow" onClick={() => (edit ? openAccountEditor(a) : navigate(`/tx?acc=${a.id}`))}>
+      <div className="row" key={a.id} style={{ gap: 0 }}>
+        <button className="item grow" onClick={() => { if (!edit) navigate(`/tx?acc=${a.id}`); }} style={{ borderTop: 0 }}>
           <Bubble icon={a.icon} color={a.color} size={44} />
           <div className="grow">
             <div className="t">{a.name}</div>
@@ -50,12 +45,7 @@ export function Accounts() {
             {foreign && !hide && <div className="amt2">≈ {money(toBase(s, v, a.currency), base, locale)}</div>}
           </div>
         </button>
-        {edit && !a.archived && (
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <button className="icon-btn" style={{ width: 34, height: 34 }} onClick={() => move(a.id, -1)} aria-label="up"><PiCaretUpBold /></button>
-            <button className="icon-btn" style={{ width: 34, height: 34 }} onClick={() => move(a.id, 1)} aria-label="down"><PiCaretDownBold /></button>
-          </div>
-        )}
+        {edit && !a.archived && <span className="handle"><PiDotsSixVerticalBold /></span>}
       </div>
     );
   };
@@ -64,7 +54,7 @@ export function Accounts() {
     <>
       <div className="topbar">
         <h1>{t('accounts')}</h1>
-        <button className={'icon-btn' + (edit ? ' on' : '')} onClick={() => setEdit(!edit)} aria-label="edit"><PiPencilSimpleBold /></button>
+        <button className={'icon-btn' + (edit ? ' on' : ' solid')} onClick={() => setEdit(!edit)} aria-label="edit">{edit ? <PiCheckBold /> : <PiArrowsDownUpBold />}</button>
         <button className="icon-btn solid" onClick={() => openAccountEditor()} aria-label="add"><PiPlusBold /></button>
       </div>
 
@@ -85,7 +75,7 @@ export function Accounts() {
         )}
       </div>
 
-      <div className="qa">
+      <div className="qa two">
         <button onClick={() => navigate('/tx?kind=transfer&gran=year')}>
           <span className="set-ico"><PiClockCounterClockwiseBold /></span>
           <span>{t('transferHistory')}</span>
@@ -96,7 +86,10 @@ export function Accounts() {
         </button>
       </div>
 
-      <div className="paper flush">{active.map((a) => row(a.id))}</div>
+      {edit && <div className="hint"><PiHandGrabbingBold /> {t('dragHintList')}</div>}
+      <div className="paper flush">
+        <Sortable items={active} enabled={edit} onCommit={commit} render={(a) => row(a.id)} itemClass="acc-row" />
+      </div>
 
       {archived.length > 0 && (
         <>

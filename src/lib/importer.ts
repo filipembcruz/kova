@@ -13,9 +13,10 @@ const mapIcon = (s: unknown) => LEGACY_ICON[String(s)] ?? 'question';
 const num = (v: unknown) => (v === null || v === undefined || v === '' ? null : Number(v));
 
 /** Read a .mmbackup (zip with an SQLite database) or the raw .db and convert it to our state. */
-export async function importMmBackup(data: ArrayBuffer | Uint8Array, prev?: State): Promise<{ state: State; report: ImportReport }> {
+export async function importMmBackup(data: ArrayBuffer | Uint8Array, prev?: State): Promise<{ state: State; report: ImportReport; files: Map<string, Blob> }> {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
   let dbBytes: Uint8Array | null = null;
+  let zip: JSZip | null = null;
   if (bytes[0] === 0x53 && bytes[1] === 0x51) dbBytes = bytes; // "SQ"
   else {
     // zip may have extra data prepended; find the first local header
@@ -23,13 +24,33 @@ export async function importMmBackup(data: ArrayBuffer | Uint8Array, prev?: Stat
     for (let i = 0; i < Math.min(bytes.length - 4, 1 << 20); i++) {
       if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 0x03 && bytes[i + 3] === 0x04) { start = i; break; }
     }
-    const zip = await JSZip.loadAsync(start ? bytes.subarray(start) : bytes);
+    zip = await JSZip.loadAsync(start ? bytes.subarray(start) : bytes);
     const entry = Object.values(zip.files).find((f) => !f.dir && /\.(db|sqlite)$/i.test(f.name));
     if (!entry) throw new Error('NO_DB');
     dbBytes = await entry.async('uint8array');
   }
   const db = new SqliteFile(dbBytes);
-  return convert(db, prev);
+  const out = convert(db, prev);
+  // photos attached to transactions
+  const files = new Map<string, Blob>();
+  if (zip) {
+    const fileRows = new Map(db.all('sync_file').filter((r) => !Number(r.isRemoved)).map((r) => [String(r.uid), String(r.localPath ?? '')]));
+    const photoLinks = db.all('sync_link').filter((l) => !Number(l.isRemoved) && l.entityType === 'Transaction' && l.otherType === 'Photo');
+    const byTx = new Map(out.state.txs.map((t) => [t.id, t]));
+    for (const l of photoLinks) {
+      const tx = byTx.get(String(l.entityUid));
+      const local = fileRows.get(String(l.otherUid));
+      if (!tx || !local) continue;
+      const entry = Object.values(zip.files).find((f) => f.name.endsWith(local));
+      if (!entry) continue;
+      const data = await entry.async('uint8array');
+      const type = /\.png$/i.test(local) ? 'image/png' : /\.pdf$/i.test(local) ? 'application/pdf' : 'image/jpeg';
+      const id = 'att-' + String(l.otherUid);
+      files.set(id, new Blob([data], { type }));
+      tx.attachments = [...(tx.attachments ?? []), { id, name: local, type, size: data.length }];
+    }
+  }
+  return { ...out, files };
 }
 
 export interface ImportReport {
