@@ -58,6 +58,7 @@ const en = {
   rNonEssOk: 'At a healthy level.', rConcentration: '{c} takes {p}% of spending', rConcentrationText: 'This is where most of your money goes.',
   rFixed: '{n} fixed costs detected (~{v}/mo)', rFixedText: 'They repeat every month with similar amounts — review subscriptions and bills.',
   rWorthUp: 'Net worth grew {v}', rWorthDown: 'Net worth dropped {v}', rWorthText: 'Total balance at the end of the period: {v}.',
+  incomePace: 'Income pace', vsPrevPeriod: 'vs previous', monthlyAvg: 'Monthly avg', savedShort: 'Saved',
   perDay: '/day', item: 'item', items: 'items', archivedAccounts: 'Archived accounts', convertedAt: 'Converted to',
 };
 
@@ -120,6 +121,7 @@ const pt: Dict = {
   rNonEssOk: 'Em um nível saudável.', rConcentration: '{c} leva {p}% dos gastos', rConcentrationText: 'É para onde mais vai o seu dinheiro.',
   rFixed: '{n} gastos fixos detectados (~{v}/mês)', rFixedText: 'Se repetem todo mês com valor parecido — revise assinaturas e contas.',
   rWorthUp: 'Patrimônio cresceu {v}', rWorthDown: 'Patrimônio caiu {v}', rWorthText: 'Saldo total no fim do período: {v}.',
+  incomePace: 'Ritmo de renda', vsPrevPeriod: 'vs anterior', monthlyAvg: 'Média mensal', savedShort: 'Economia',
   perDay: '/dia', item: 'item', items: 'itens', archivedAccounts: 'Contas arquivadas', convertedAt: 'Convertido para',
 };
 

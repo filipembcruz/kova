@@ -303,3 +303,11 @@ input, textarea { user-select: text; }
 .check { width: 22px; height: 22px; border-radius: 7px; border: 2px solid var(--line); display: grid; place-items: center; flex: none; color: var(--paper); }
 .check.on { background: var(--ink); border-color: var(--ink); }
 .check svg { width: 14px; height: 14px; }
+
+/* month summary under the balance: each tile opens its detail */
+.month-sum { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: -4px 0 14px; }
+.month-sum button { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 10px 10px 12px; text-align: left; min-width: 0; }
+.month-sum button:active { background: var(--sunk); }
+.month-sum span { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 600; }
+.month-sum span svg { width: 13px; height: 13px; flex: none; }
+.month-sum b { display: block; margin-top: 4px; font-family: var(--display); font-weight: 700; font-size: clamp(12.5px, 3.7vw, 16px); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; line-height: 1.2; }

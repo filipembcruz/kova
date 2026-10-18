@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
-import { PiEyeBold, PiEyeSlashBold, PiCaretDownBold, PiCheckBold, PiArrowsClockwiseBold, PiSquaresFourBold, PiChartLineUpBold } from 'react-icons/pi';
+import { PiEyeBold, PiEyeSlashBold, PiCaretDownBold, PiCheckBold, PiArrowsClockwiseBold, PiSquaresFourBold, PiChartLineUpBold, PiArrowDownLeftBold, PiArrowUpRightBold, PiPiggyBankBold } from 'react-icons/pi';
 import type { Kind, Tx } from '../lib/types';
 import { setState, useBalances, useStore } from '../lib/store';
 import { useT } from '../i18n';
-import { byCategory, filterTx, Period, periodOf, shiftPeriod, sum, today, toBase } from '../lib/calc';
+import { addDays, byCategory, filterTx, parseIso, Period, periodOf, shiftPeriod, sum, today, toBase, pad } from '../lib/calc';
 import { money, shortDate } from '../lib/format';
 import { Bubble, Empty, PeriodNav, Sheet } from '../components/ui';
-import { Donut } from '../components/charts';
+import { Donut, PaceChart } from '../components/charts';
 import { navigate, openOverlay, toast } from '../lib/nav';
 import { openTxEditor } from '../components/TxEditor';
 import { GranPicker, goTx, periodLabel } from './Transactions';
@@ -33,6 +33,43 @@ export function Home() {
     const now = today();
     return s.txs.filter((x) => x.date > now && (!accId || x.accountId === accId)).sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 6);
   }, [s.txs, accId]);
+
+  const month = useMemo(() => {
+    const m = periodOf('month', today());
+    const i = sum(filterTx(s, m, 'income', accId || undefined));
+    const e = sum(filterTx(s, m, 'expense', accId || undefined));
+    return { m, i, e, rate: i ? Math.round(((i - e) / i) * 100) : null };
+  }, [s.txs, accId]);
+
+  const pace = useMemo(() => {
+    if (period.gran === 'day') return null;
+    const txs = filterTx(s, period, kind, accId || undefined);
+    const now = today();
+    const days = Math.round((parseIso(period.end).getTime() - parseIso(period.start).getTime()) / 864e5) + 1;
+    const byMonth = period.gran === 'year' || days > 62;
+    const buckets: { key: string; label: string; value: number; today?: boolean }[] = [];
+    if (byMonth) {
+      const d0 = parseIso(period.start);
+      for (let m = new Date(d0.getFullYear(), d0.getMonth(), 1); m <= parseIso(period.end); m = new Date(m.getFullYear(), m.getMonth() + 1, 1)) {
+        const key = `${m.getFullYear()}-${pad(m.getMonth() + 1)}`;
+        buckets.push({ key, label: m.toLocaleDateString(locale, { month: 'narrow' }), value: 0, today: now.startsWith(key) });
+      }
+      for (const x of txs) { const b = buckets.find((k) => k.key === x.date.slice(0, 7)); if (b) b.value += x.base; }
+    } else {
+      for (let d = period.start; d <= period.end; d = addDays(d, 1)) {
+        const dt = parseIso(d);
+        buckets.push({ key: d, label: period.gran === 'week' ? dt.toLocaleDateString(locale, { weekday: 'short' }).replace('.', '') : String(dt.getDate()), value: 0, today: d === now });
+      }
+      const idx = new Map(buckets.map((b, i) => [b.key, i]));
+      for (const x of txs) { const i = idx.get(x.date); if (i !== undefined) buckets[i].value += x.base; }
+    }
+    const total = sum(txs);
+    const elapsed = buckets.filter((b) => b.key <= now.slice(0, b.key.length)).length || buckets.length;
+    const avg = total / Math.max(1, elapsed);
+    const isCurrent = period.start <= now && now <= period.end;
+    const prevTotal = sum(filterTx(s, shiftPeriod(period, -1, s.settings.weekStart), kind, accId || undefined));
+    return { buckets, avg, total, byMonth, projection: isCurrent ? Math.round(avg * buckets.length) : null, change: prevTotal ? ((total - prevTotal) / prevTotal) * 100 : null };
+  }, [s.txs, period, kind, accId, locale]);
 
   const balanceV = acc ? bal.get(acc.id) ?? 0 : total;
   const balanceCur = acc ? acc.currency : base;
@@ -82,6 +119,21 @@ export function Home() {
         {acc && acc.currency !== base && !hide && <div className="small muted">≈ {money(toBase(s, balanceV, acc.currency), base, locale)}</div>}
       </div>
 
+      <div className="month-sum">
+        <button onClick={() => goTx({ kind: 'income', gran: 'month', start: month.m.start, end: month.m.end, ...(accId ? { acc: accId } : {}) })}>
+          <span><PiArrowDownLeftBold /> {t('income')}</span>
+          <b className="pos">{money(month.i, base, locale)}</b>
+        </button>
+        <button onClick={() => goTx({ kind: 'expense', gran: 'month', start: month.m.start, end: month.m.end, ...(accId ? { acc: accId } : {}) })}>
+          <span><PiArrowUpRightBold /> {t('expenses')}</span>
+          <b>{money(month.e, base, locale)}</b>
+        </button>
+        <button onClick={() => navigate('/charts')}>
+          <span><PiPiggyBankBold /> {t('savedShort')}</span>
+          <b style={{ color: (month.rate ?? 0) >= 0 ? 'var(--brand)' : 'var(--exp)' }}>{month.rate === null ? '—' : `${month.rate}%`}</b>
+        </button>
+      </div>
+
       <div className="paper">
         <div className="kind-toggle" style={{ ['--k' as any]: kColor }}>
           <button className={kind === 'expense' ? 'on' : ''} onClick={() => { setKind('expense'); setSel(null); }}>{t('expenses')}</button>
@@ -119,6 +171,24 @@ export function Home() {
           );
         })}
       </div>
+
+      {pace && pace.total > 0 && (
+        <div className="paper">
+          <h3>
+            {kind === 'expense' ? t('spendingPace') : t('incomePace')}
+            {pace.change !== null && Math.abs(pace.change) >= 1 && (
+              <span className={'tag ' + ((kind === 'expense' ? pace.change > 0 : pace.change < 0) ? 'red' : 'green')} style={{ marginLeft: 'auto' }}>
+                {pace.change > 0 ? '+' : ''}{Math.round(pace.change)}% {t('vsPrevPeriod')}
+              </span>
+            )}
+          </h3>
+          <PaceChart data={pace.buckets} avg={pace.avg} color={kind === 'expense' ? '#E5484D' : '#11905A'} fmt={(v) => money(v, base, locale, { noCents: true })} />
+          <div className="stats" style={{ marginTop: 6 }}>
+            <div className="st"><span>{pace.byMonth ? t('monthlyAvg') : t('dailyAvg')}</span><b>{money(Math.round(pace.avg), base, locale)}</b></div>
+            {pace.projection !== null && <div className="st"><span>{t('projected')}</span><b style={{ color: 'var(--brand)' }}>{money(pace.projection, base, locale)}</b></div>}
+          </div>
+        </div>
+      )}
 
       {upcoming.length > 0 && (
         <>
