@@ -1,0 +1,260 @@
+import { useState } from 'react';
+import { PiUserDuotone, PiTranslateDuotone, PiPaletteDuotone, PiCurrencyCircleDollarDuotone, PiArrowsClockwiseBold, PiEyeSlashDuotone, PiCalendarDuotone, PiDownloadSimpleDuotone, PiUploadSimpleDuotone, PiFileCsvDuotone, PiTrashDuotone, PiGithubLogoDuotone, PiHeartDuotone, PiCaretRightBold, PiTagDuotone, PiSwapDuotone } from 'react-icons/pi';
+import type { State } from '../lib/types';
+import { getState, replaceState, setState, useStore } from '../lib/store';
+import { useT } from '../i18n';
+import { CURRENCIES, initialState, detectLang } from '../lib/defaults';
+import { Switch, Seg, confirmDialog, Sheet } from '../components/ui';
+import { navigate, openOverlay, toast } from '../lib/nav';
+import { importMmBackup } from '../lib/importer';
+import { pickFile, saveTextFile } from '../native';
+import { today } from '../lib/calc';
+
+declare const __APP_VERSION__: string;
+export const REPO_URL = 'https://github.com/filipembcruz/kova';
+
+function Ico({ c, children }: { c: string; children: React.ReactNode }) {
+  return <div className="bubble" style={{ width: 42, height: 42, borderRadius: 14, background: c }}>{children}</div>;
+}
+
+export async function updateRates(failMsg?: string) {
+  const s = getState();
+  const base = s.settings.baseCurrency;
+  const needed = [...new Set(s.accounts.map((a) => a.currency).filter((c) => c !== base))];
+  const urls = [`https://api.frankfurter.dev/v1/latest?base=${base}`, `https://open.er-api.com/v6/latest/${base}`];
+  for (const u of urls) {
+    try {
+      const r = await fetch(u);
+      if (!r.ok) continue;
+      const j = await r.json();
+      const rates = j.rates as Record<string, number>;
+      if (!rates) continue;
+      const next = { ...s.settings.rates };
+      let got = 0;
+      for (const c of new Set([...needed, ...Object.keys(next)])) {
+        if (rates[c]) { next[c] = 1 / rates[c]; got++; }
+      }
+      if (!got && needed.length) continue;
+      setState((st) => ({ ...st, settings: { ...st.settings, rates: next, ratesUpdated: new Date().toISOString() } }));
+      return true;
+    } catch { /* try next */ }
+  }
+  if (failMsg) toast(failMsg);
+  return false;
+}
+
+export async function runMmImport(t: (k: any) => string) {
+  const f = await pickFile('*/*');
+  if (!f) return;
+  const ok = await confirmDialog(t('confirmImport'), t('importBackup'), t('cancel'), false);
+  if (!ok) return;
+  toast(t('importing'));
+  try {
+    const buf = await f.arrayBuffer();
+    const { state, report } = await importMmBackup(buf, getState());
+    replaceState(state);
+    toast(`${t('imported')}: ${report.txs} ${t('transactions').toLowerCase()} · ${report.accounts} ${t('accounts').toLowerCase()}`);
+    navigate('/', true);
+  } catch (e) {
+    console.error(e);
+    toast(t('importFail'));
+  }
+}
+
+export function Settings() {
+  const s = useStore();
+  const { t, locale } = useT();
+  const st = s.settings;
+  const set = (patch: Partial<State['settings']>) => setState((x) => ({ ...x, settings: { ...x.settings, ...patch } }));
+  const used = [...new Set(s.accounts.map((a) => a.currency).filter((c) => c !== st.baseCurrency))];
+  const [busy, setBusy] = useState(false);
+
+  const changeBase = (next: string) => {
+    if (next === st.baseCurrency) return;
+    const r = st.rates[next] ?? 1; // old base per 1 next
+    setState((x) => {
+      const rates: Record<string, number> = {};
+      for (const [c, v] of Object.entries(x.settings.rates)) if (c !== next) rates[c] = v / r;
+      rates[x.settings.baseCurrency] = 1 / r;
+      return {
+        ...x,
+        txs: x.txs.map((tx) => ({ ...tx, base: Math.round(tx.base / r) })),
+        categories: x.categories.map((c) => (c.budget ? { ...c, budget: Math.round(c.budget / r) } : c)),
+        settings: { ...x.settings, baseCurrency: next, rates },
+      };
+    });
+  };
+
+  const exportJson = async () => {
+    const data = JSON.stringify({ app: 'kova', version: 1, exported: new Date().toISOString(), state: getState() });
+    await saveTextFile(`kova-backup-${today()}.json`, data, 'application/json', t('exportBackup'));
+  };
+  const restoreJson = async () => {
+    const f = await pickFile('application/json,.json');
+    if (!f) return;
+    try {
+      const j = JSON.parse(await f.text());
+      const state: State = j.state ?? j;
+      if (!state.accounts || !state.txs) throw new Error('bad');
+      if (!(await confirmDialog(t('confirmImport'), t('restoreBackup'), t('cancel'), false))) return;
+      replaceState({ ...state, settings: { ...state.settings, onboarded: true } });
+      toast(t('imported'));
+    } catch {
+      toast(t('importFail'));
+    }
+  };
+  const exportCsv = async () => {
+    const x = getState();
+    const cat = new Map(x.categories.map((c) => [c.id, c.name]));
+    const acc = new Map(x.accounts.map((a) => [a.id, a]));
+    const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const rows = [['date', 'type', 'category', 'account', 'amount', 'currency', `amount_${x.settings.baseCurrency}`, 'note', 'tags'].join(',')];
+    for (const tx of x.txs) {
+      const a = acc.get(tx.accountId);
+      rows.push([tx.date, tx.kind, esc(cat.get(tx.categoryId) ?? ''), esc(a?.name ?? ''), (tx.amount / 100).toFixed(2), a?.currency ?? '', (tx.base / 100).toFixed(2), esc(tx.note), esc(tx.tags.join(' '))].join(','));
+    }
+    for (const tr of x.transfers) {
+      rows.push([tr.date, 'transfer', '', esc(`${acc.get(tr.from)?.name} -> ${acc.get(tr.to)?.name}`), (tr.fromAmount / 100).toFixed(2), acc.get(tr.from)?.currency ?? '', '', esc(tr.note), ''].join(','));
+    }
+    await saveTextFile(`kova-${today()}.csv`, '﻿' + rows.join('\n'), 'text/csv', t('exportCsv'));
+  };
+  const erase = async () => {
+    if (!(await confirmDialog(t('confirmErase'), t('eraseAll'), t('cancel')))) return;
+    const fresh = initialState(detectLang());
+    replaceState({ ...fresh, settings: { ...fresh.settings, lang: st.lang, theme: st.theme } });
+  };
+
+  const editName = () =>
+    openOverlay((close) => <NameSheet initial={st.name} onSave={(v) => { set({ name: v }); close(); }} />);
+
+  return (
+    <>
+      <div className="topbar"><h1>{t('settings')}</h1></div>
+
+      <div className="section-title">{t('profile')}</div>
+      <div className="card tight">
+        <button className="setting" onClick={editName}>
+          <Ico c="linear-gradient(145deg,#a996ff,#7c5cff)"><PiUserDuotone /></Ico>
+          <div className="grow"><div className="t">{t('yourName')}</div><div className="s">{st.name || '—'}</div></div>
+          <PiCaretRightBold className="muted" />
+        </button>
+        <div className="setting">
+          <Ico c="linear-gradient(145deg,#6fd3ff,#22b8e6)"><PiTranslateDuotone /></Ico>
+          <div className="grow"><div className="t">{t('language')}</div></div>
+        </div>
+        <div style={{ padding: '0 12px 12px' }}>
+          <Seg value={st.lang} onChange={(v) => set({ lang: v })} options={[{ v: 'auto', label: t('auto') }, { v: 'pt', label: 'Português' }, { v: 'en', label: 'English' }]} />
+        </div>
+        <div className="setting">
+          <Ico c="linear-gradient(145deg,#ff9cc8,#ff5fa2)"><PiPaletteDuotone /></Ico>
+          <div className="grow"><div className="t">{t('theme')}</div></div>
+        </div>
+        <div style={{ padding: '0 12px 12px' }}>
+          <Seg value={st.theme} onChange={(v) => set({ theme: v })} options={[{ v: 'system', label: t('system') }, { v: 'light', label: t('light') }, { v: 'dark', label: t('dark') }]} />
+        </div>
+        <div className="setting">
+          <Ico c="linear-gradient(145deg,#c3b8d8,#8b86a0)"><PiEyeSlashDuotone /></Ico>
+          <div className="grow"><div className="t">{t('hideBalances')}</div></div>
+          <Switch on={st.hideBalance} onChange={(v) => set({ hideBalance: v })} />
+        </div>
+        <div className="setting">
+          <Ico c="linear-gradient(145deg,#ffd36b,#ffb020)"><PiCalendarDuotone /></Ico>
+          <div className="grow"><div className="t">{t('weekStartsOn')}</div></div>
+          <Seg value={String(st.weekStart) as '0' | '1'} onChange={(v) => set({ weekStart: Number(v) as 0 | 1 })} options={[{ v: '1', label: t('monday') }, { v: '0', label: t('sunday') }]} />
+        </div>
+      </div>
+
+      <div className="section-title">{t('currency')}</div>
+      <div className="card tight">
+        <label className="setting">
+          <Ico c="linear-gradient(145deg,#7ce8b3,#18b47b)"><PiCurrencyCircleDollarDuotone /></Ico>
+          <div className="grow"><div className="t">{t('baseCurrency')}</div></div>
+          <select className="v" value={st.baseCurrency} onChange={(e) => changeBase(e.target.value)} style={{ border: 0, background: 'var(--card2)', borderRadius: 12, padding: '8px 10px', fontWeight: 600 }}>
+            {[...new Set([st.baseCurrency, ...CURRENCIES])].map((c) => <option key={c}>{c}</option>)}
+          </select>
+        </label>
+        {used.length > 0 && (
+          <div style={{ padding: '4px 12px 12px' }}>
+            <div className="row" style={{ marginBottom: 8 }}>
+              <PiSwapDuotone className="muted" />
+              <b className="grow small">{t('exchangeRates')}</b>
+              <button className="tag lilac" disabled={busy} onClick={async () => { setBusy(true); const ok = await updateRates(t('ratesFail')); setBusy(false); if (ok) toast(t('ratesUpdated')); }}>
+                <PiArrowsClockwiseBold /> {t('updateRates')}
+              </button>
+            </div>
+            {used.map((c) => (
+              <label key={c} className="field" style={{ boxShadow: 'none', background: 'var(--card2)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <b style={{ whiteSpace: 'nowrap' }}>1 {c} =</b>
+                <input
+                  inputMode="decimal"
+                  defaultValue={st.rates[c] ? String(+st.rates[c].toFixed(4)) : ''}
+                  key={st.ratesUpdated + c}
+                  onBlur={(e) => {
+                    const v = parseFloat(e.target.value.replace(',', '.'));
+                    if (v > 0) set({ rates: { ...st.rates, [c]: v } });
+                  }}
+                />
+                <b>{st.baseCurrency}</b>
+              </label>
+            ))}
+            {st.ratesUpdated && <div className="small muted" style={{ padding: '0 4px' }}>{t('ratesUpdated')}: {new Date(st.ratesUpdated).toLocaleString(locale)}</div>}
+          </div>
+        )}
+        <button className="setting" onClick={() => navigate('/categories')}>
+          <Ico c="linear-gradient(145deg,#e7a1ff,#b57bff)"><PiTagDuotone /></Ico>
+          <div className="grow"><div className="t">{t('manageCategories')}</div></div>
+          <PiCaretRightBold className="muted" />
+        </button>
+      </div>
+
+      <div className="section-title">{t('data')}</div>
+      <div className="card tight">
+        <button className="setting" onClick={() => runMmImport(t)}>
+          <Ico c="linear-gradient(145deg,#a996ff,#5b4bdb)"><PiDownloadSimpleDuotone /></Ico>
+          <div className="grow"><div className="t">{t('importOther')}</div><div className="s">{t('importOtherD')}</div></div>
+        </button>
+        <button className="setting" onClick={exportJson}>
+          <Ico c="linear-gradient(145deg,#7ce8b3,#12b886)"><PiUploadSimpleDuotone /></Ico>
+          <div className="grow"><div className="t">{t('exportBackup')}</div><div className="s">{t('exportBackupD')}</div></div>
+        </button>
+        <button className="setting" onClick={restoreJson}>
+          <Ico c="linear-gradient(145deg,#6fd3ff,#3d8bff)"><PiDownloadSimpleDuotone /></Ico>
+          <div className="grow"><div className="t">{t('restoreBackup')}</div><div className="s">{t('restoreBackupD')}</div></div>
+        </button>
+        <button className="setting" onClick={exportCsv}>
+          <Ico c="linear-gradient(145deg,#ffd36b,#ff8a4c)"><PiFileCsvDuotone /></Ico>
+          <div className="grow"><div className="t">{t('exportCsv')}</div><div className="s">{t('exportCsvD')}</div></div>
+        </button>
+        <button className="setting" onClick={erase}>
+          <Ico c="linear-gradient(145deg,#ff9aa6,#f0445a)"><PiTrashDuotone /></Ico>
+          <div className="grow"><div className="t" style={{ color: 'var(--red)' }}>{t('eraseAll')}</div><div className="s">{t('eraseAllD')}</div></div>
+        </button>
+      </div>
+
+      <div className="section-title">{t('about')}</div>
+      <div className="card tight">
+        <a className="setting" href={REPO_URL} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <Ico c="linear-gradient(145deg,#4b4560,#16131f)"><PiGithubLogoDuotone /></Ico>
+          <div className="grow"><div className="t">{t('sourceCode')}</div><div className="s">{t('openSource')} · MIT</div></div>
+          <PiCaretRightBold className="muted" />
+        </a>
+        <div className="setting">
+          <Ico c="linear-gradient(145deg,#ff9cc8,#e056fd)"><PiHeartDuotone /></Ico>
+          <div className="grow"><div className="t">Kova</div><div className="s">{t('version')} {typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'}</div></div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function NameSheet({ initial, onSave }: { initial: string; onSave: (v: string) => void }) {
+  const { t } = useT();
+  const [v, setV] = useState(initial);
+  return (
+    <Sheet title={t('yourName')} footer={<button className="btn grad" onClick={() => onSave(v.trim())}>{t('save')}</button>}>
+      <div className="sheet-b">
+        <label className="field"><span>{t('name')}</span><input autoFocus value={v} onChange={(e) => setV(e.target.value)} /></label>
+      </div>
+    </Sheet>
+  );
+}
