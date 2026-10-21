@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { PiUserDuotone, PiTranslateDuotone, PiPaletteDuotone, PiCurrencyCircleDollarDuotone, PiArrowsClockwiseBold, PiEyeSlashDuotone, PiCalendarDuotone, PiDownloadSimpleDuotone, PiFileCsvDuotone, PiTrashDuotone, PiHeartDuotone, PiCaretRightBold, PiTagDuotone, PiSwapDuotone, PiCloudCheckDuotone, PiHashDuotone, PiReceiptDuotone, PiShareNetworkDuotone, PiClockCounterClockwiseDuotone, PiVibrateDuotone, PiChatTextDuotone, PiMagnifyingGlassBold, PiLockKeyDuotone, PiFingerprintDuotone, PiLightningDuotone } from 'react-icons/pi';
+import { PiUserDuotone, PiTranslateDuotone, PiPaletteDuotone, PiCurrencyCircleDollarDuotone, PiArrowsClockwiseBold, PiEyeSlashDuotone, PiCalendarDuotone, PiDownloadSimpleDuotone, PiFileCsvDuotone, PiTrashDuotone, PiHeartDuotone, PiCaretRightBold, PiTagDuotone, PiSwapDuotone, PiCloudCheckDuotone, PiHashDuotone, PiReceiptDuotone, PiShareNetworkDuotone, PiClockCounterClockwiseDuotone, PiVibrateDuotone, PiSquaresFourDuotone, PiChatTextDuotone, PiMagnifyingGlassBold, PiLockKeyDuotone, PiFingerprintDuotone, PiLightningDuotone } from 'react-icons/pi';
 import type { State } from '../lib/types';
 import { getState, replaceState, setState, useStore, backupNow } from '../lib/store';
 import { useT } from '../i18n';
@@ -198,6 +198,13 @@ export function Settings() {
             <Switch on={!!st.biometric} onChange={(v) => set({ biometric: v })} />
           </div>
         )}
+        <div className="setting">
+          <Ico><PiSquaresFourDuotone /></Ico>
+          <div className="grow"><div className="t">{t('catRows')}</div><div className="s">{t('catRowsD')}</div></div>
+        </div>
+        <div style={{ padding: '0 12px 12px' }}>
+          <Seg value={String(st.catRows ?? 2)} onChange={(v) => set({ catRows: Number(v) })} options={[{ v: '2', label: '2' }, { v: '3', label: '3' }, { v: '4', label: '4' }, { v: '0', label: t('allRows') }]} />
+        </div>
         <div className="setting">
           <Ico><PiVibrateDuotone /></Ico>
           <div className="grow"><div className="t">{t('haptics')}</div><div className="s">{t('hapticsD')}</div></div>

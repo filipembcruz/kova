@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { PiBackspaceBold, PiCheckBold, PiTrashBold, PiCalendarBlankBold, PiHashBold, PiArrowDownBold, PiPlusBold, PiPaperclipBold, PiFilePdfDuotone, PiXBold, PiShareNetworkBold, PiBellRingingBold, PiLightningBold, PiLightningFill } from 'react-icons/pi';
+import { PiBackspaceBold, PiCheckBold, PiTrashBold, PiCalendarBlankBold, PiHashBold, PiArrowDownBold, PiPlusBold, PiPaperclipBold, PiFilePdfDuotone, PiXBold, PiShareNetworkBold, PiBellRingingBold, PiLightningBold, PiLightningFill, PiDotsThreeBold } from 'react-icons/pi';
 import type { Attachment, Kind, Repeat, Tx, Transfer } from '../lib/types';
 import { getState, setState, useStore } from '../lib/store';
 import { accountsSorted, addDays, evalExpr, today, toBase, uid, rate, parseIso } from '../lib/calc';
@@ -80,6 +80,7 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
   const [tagInput, setTagInput] = useState('');
   const [pad, setPad] = useState(true); // our number keypad: only while the amount is being typed
   const [noteFocus, setNoteFocus] = useState(false);
+  const [allCats, setAllCats] = useState(false);
   const [editingTo, setEditingTo] = useState(false);
 
   const account = s.accounts.find((a) => a.id === acc);
@@ -93,6 +94,12 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
   const future = date > today();
 
   const cats = s.categories.filter((c) => c.kind === mode && (!c.archived || c.id === cat)).sort((a, b) => a.order - b.order);
+  const rows = s.settings.catRows ?? 2;
+  const limit = rows > 0 && !allCats && cats.length > rows * 4 ? rows * 4 - 1 : cats.length;
+  let shownCats = cats.slice(0, limit);
+  const selCat = cats.find((c) => c.id === cat);
+  if (selCat && !shownCats.includes(selCat)) shownCats = [...shownCats.slice(0, limit - 1), selCat];
+  const hiddenCount = cats.length - shownCats.length;
   const showTags = mode !== 'transfer' && s.settings.showTags !== false;
   const notes = useMemo(() => {
     const m = new Map<string, { n: number; cats: Map<string, number>; last: string }>();
@@ -244,7 +251,10 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
 
   const keys = ['7', '8', '9', 'back', '÷', '4', '5', '6', '+', '×', '1', '2', '3', '-', 'ok', '00', '0', ',', '='];
   const display = editingTo ? toExpr : expr;
-  const shown = money(editingTo ? toCents : cents, editingTo ? toAccount!.currency : cur, locale);
+  const shownCur = editingTo ? toAccount!.currency : cur;
+  const sym = money(0, shownCur, locale).replace(/[\d\s.,\u00a0]/g, '');
+  const typed = display.replace(/[+\-×÷]/g, ' $& ');
+  const result = money(editingTo ? toCents : cents, shownCur, locale);
   const quick = [addDays(today(), -1), today()];
   const custom = !quick.includes(date);
   const tagSuggestions = allTags.filter((g) => !tags.includes(g) && (!tagInput || g.toLowerCase().includes(tagInput.toLowerCase()))).slice(0, 10);
@@ -262,7 +272,8 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
         {(tx || transfer) && <button className="icon-btn" style={{ color: 'var(--exp)' }} onClick={remove} aria-label="delete"><PiTrashBold /></button>}
       </>}
     >
-      <div className="sheet-b" style={{ paddingBottom: 12 }} onFocusCapture={(e) => { if ((e.target as HTMLElement).tagName === 'INPUT') setPad(false); }}>
+      <div className="sheet-b" style={{ paddingBottom: 12 }} onFocusCapture={(e) => { if ((e.target as HTMLElement).tagName === 'INPUT') setPad(false); }}
+        onPointerDown={(e) => { if (!(e.target as HTMLElement).closest('.amount-box, .field-to, .seg')) setPad(false); }}>
         <Seg<Mode>
           color
           value={mode}
@@ -276,8 +287,10 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
 
         <div className={'amount-box' + (pad ? ' on' : '')} onClick={() => { setPad(true); setEditingTo(false); (document.activeElement as HTMLElement)?.blur?.(); }}>
           <div className="cur">{editingTo ? `${t('received')} · ${toAccount?.currency}` : `${t('amount')} · ${cur}`}</div>
-          <div className="val" style={{ color: mode === 'income' ? 'var(--inc)' : mode === 'expense' ? 'var(--ink)' : 'var(--xfer)' }}>{shown}</div>
-          <div className="expr">{/[+\-×÷]/.test(display) ? display : ' '}</div>
+          <div className="val" style={{ color: mode === 'income' ? 'var(--inc)' : mode === 'expense' ? 'var(--ink)' : 'var(--xfer)' }}>
+            <span className="sym">{sym}</span>{display ? typed : <span className="ph">0</span>}{pad && <i className="caret" />}
+          </div>
+          <div className="expr">{/[+\-×÷]/.test(display) ? '= ' + result : ' '}</div>
         </div>
 
         <div className="label">{mode === 'transfer' ? t('fromAccount') : t('account')}</div>
@@ -301,7 +314,7 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
               ))}
             </div>
             {crossCurrency && (
-              <button className="field" style={{ width: '100%', textAlign: 'left', outline: editingTo ? '2px solid var(--brand)' : 'none' }} onClick={() => { setEditingTo(true); setPad(true); if (!toExpr) setToExpr(fmtExpr(autoTo)); }}>
+              <button className="field field-to" style={{ width: '100%', textAlign: 'left', outline: editingTo ? '2px solid var(--brand)' : 'none' }} onClick={() => { setEditingTo(true); setPad(true); if (!toExpr) setToExpr(fmtExpr(autoTo)); }}>
                 <span>{t('received')} ({toAccount!.currency})</span>
                 <b className="num" style={{ fontSize: 20 }}>{money(toCents, toAccount!.currency, locale)}</b>
                 <div className="small muted">1 {cur} = {(toCents / Math.max(cents, 1)).toFixed(4)} {toAccount!.currency}</div>
@@ -312,12 +325,18 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
           <>
             <div className="label">{t('category')}</div>
             <div className="cgrid picker" style={{ marginBottom: 6 }}>
-              {cats.map((c) => (
+              {shownCats.map((c) => (
                 <button key={c.id} className={'c' + (cat === c.id ? ' on' : '')} onClick={() => { tap(); setCat(c.id); }}>
                   <Bubble icon={c.icon} color={c.color} size={50} solid={cat === c.id} />
                   <span className="nm">{c.name}</span>
                 </button>
               ))}
+              {hiddenCount > 0 && (
+                <button className="c" onClick={() => setAllCats(true)}>
+                  <span className="bubble more"><PiDotsThreeBold /></span>
+                  <span className="nm">{t('moreN', { n: String(hiddenCount) })}</span>
+                </button>
+              )}
             </div>
           </>
         )}

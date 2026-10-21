@@ -128,7 +128,7 @@ function AccountEditor({ acc, close }: { acc?: Account; close: () => void }) {
   const [icon, setIcon] = useState(acc?.icon ?? 'wallet');
   const [color, setColor] = useState(acc?.color ?? '#7C5CFF');
   const [currency, setCurrency] = useState(acc?.currency ?? s.settings.baseCurrency);
-  const [bal, setBal] = useState(acc ? (current / 100).toFixed(2) : '');
+  const [bal, setBal] = useState(acc && current !== 0 ? (current / 100).toFixed(2).replace('.', ',') : '');
   const [include, setInclude] = useState(acc?.includeInTotal ?? true);
   const used = acc ? s.txs.some((x) => x.accountId === acc.id) || s.transfers.some((x) => x.from === acc.id || x.to === acc.id) : false;
 

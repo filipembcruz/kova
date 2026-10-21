@@ -85,6 +85,7 @@ export interface Settings {
   pinSalt?: string;
   pinLen?: number;
   biometric?: boolean;
+  catRows?: number; // category rows shown in the transaction editor (0 = all, default 2)
   shortcutsOn?: boolean; // shortcut chips on Home + ⚡ in the editor (default on)
   haptics?: boolean; // vibrate on taps (default on)
   showTags?: boolean; // tags field in the transaction editor (default on)
