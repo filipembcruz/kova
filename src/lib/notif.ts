@@ -6,7 +6,7 @@ import type { State, Tx, Transfer, Kind } from './types';
 import { getState, setState } from './store';
 import { addDays, rate, toBase, today, uid } from './calc';
 import { getT, resolveLang } from '../i18n';
-import { isNative, getNotifQueue, ackNotif, setNotifBrain, onNotifEvent } from '../native';
+import { isNative, getNotifQueue, ackNotif, setNotifBrain, onNotifEvent, reprocessNotif } from '../native';
 
 export interface NotifItem {
   id: string;
@@ -61,6 +61,7 @@ export function buildBrain(s: State) {
     labels: {
       confirm: t('nConfirm'), edit: t('nEdit'), notTx: t('nNotTx'), undo: t('nUndo'), added: t('nAdded'),
       question: t('nQuestion'), dup: t('nDup'), from: t('nFrom'), chTx: t('nChTx'), chStatus: t('nChStatus'),
+      askTitle: t('nAskTitle'), askText: t('nAskText'), enable: t('nEnable'),
     },
   };
 }
@@ -224,6 +225,9 @@ export function startNotifSync() {
   if (started) return;
   started = true;
   syncNotifs();
+  // catch up with notifications that arrived while an app was being set up
+  const apps = getState().settings.notif?.apps ?? {};
+  if (getState().settings.notif?.on) setTimeout(() => { for (const [pkg, a] of Object.entries(apps)) if (a.on) enableAppNow(pkg); }, 2000);
   onNotifEvent(() => syncNotifs());
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNotifs(); });
 }
@@ -235,3 +239,20 @@ export function mockNotif(item: Partial<NotifItem>) {
   localStorage.setItem(MOCK, JSON.stringify(q));
 }
 if (typeof window !== 'undefined' && !isNative()) (window as any).__kovaMockNotif = mockNotif;
+
+/** Banks and payment apps Kova knows (shown even before they send a notification). */
+export const KNOWN_APPS: Record<string, string> = {
+  'de.number26.android': 'N26', 'com.nu.production': 'Nubank', 'com.revolut.revolut': 'Revolut', 'br.com.intermedium': 'Inter',
+  'com.c6bank.app': 'C6 Bank', 'com.itau': 'Itaú', 'com.bradesco': 'Bradesco', 'com.santander.app': 'Santander', 'br.com.bb.android': 'Banco do Brasil',
+  'br.com.gabba.Caixa': 'Caixa', 'com.picpay': 'PicPay', 'com.mercadopago.wallet': 'Mercado Pago', 'com.transferwise.android': 'Wise',
+  'com.paypal.android.p2pmobile': 'PayPal', 'com.google.android.apps.walletnfcrel': 'Google Wallet', 'com.samsung.android.spay': 'Samsung Wallet',
+  'br.com.neon': 'Neon', 'com.btg.pactual.banking': 'BTG', 'br.com.original.bank': 'Original', 'com.xp.investimentos': 'XP', 'br.com.uol.ps.myaccount': 'PagBank',
+  'com.bcp.bank.bcp': 'Millennium', 'pt.cgd.caixadirecta': 'Caixadirecta', 'pt.activobank.app': 'ActivoBank', 'pt.novobanco.nbapp': 'Novo Banco',
+  'com.wizink.app': 'WiZink', 'com.bunq.android': 'bunq', 'com.monese.monese.live': 'Monese', 'com.vivid.money': 'Vivid', 'com.trading212.trading212': 'Trading 212',
+};
+
+/** Turn an app on: the native side gets the new settings at once and re-reads that app's recent notifications. */
+export async function enableAppNow(pkg: string) {
+  await reprocessNotif(pkg, JSON.stringify(buildBrain(getState())));
+  setTimeout(() => { syncNotifs(); }, 1500);
+}

@@ -445,3 +445,6 @@ input, textarea { user-select: text; }
 .seg-mini { display: inline-flex; gap: 2px; background: var(--sunk); padding: 3px; border-radius: 12px; margin: 2px 0 6px; }
 .seg-mini button { padding: 6px 12px; border-radius: 9px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
 .seg-mini button.on { background: var(--paper); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+
+.logrow { padding: 12px 14px; display: grid; gap: 2px; }
+.logrow + .logrow { border-top: 1px solid var(--line, rgba(0,0,0,.06)); }

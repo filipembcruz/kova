@@ -48,7 +48,7 @@ public final class TxParser {
     private static final Pattern[] MERCHANT_INC = {
         Pattern.compile("(?i)\\b(?:de|from|por)\\s+(?!(?:R\\$|US\\$|€|\\$|\\d))([\\p{L}][^.;\\n]{1,60})"),
     };
-    private static final Pattern MERCHANT_STOP = Pattern.compile("(?i)(\\s+(para o|para a|para seu|para sua|no cart|na conta|com o cart|com final|final \\d|foi |was |on |using|with |via |em \\d|[àa]s \\d|at \\d|no valor|no d[eé]bito|no cr[eé]dito|aprovad|realizad|confirmad)|\\s*[(,\\-–|]|\\s+\\d{1,2}[/:]\\d).*$");
+    private static final Pattern MERCHANT_STOP = Pattern.compile("(?i)(\\s+(para o|para a|para seu|para sua|no cart|na conta|com o cart|com final|final \\d|foi |was |were |has |have |is |are |had |on |using|with |via |em \\d|[àa]s \\d|at \\d|no valor|no d[eé]bito|no cr[eé]dito|aprovad|realizad|confirmad|processad|successful|succeeded|completed|conclu[ií]d|efetuad)|\\s*[(,\\-–|]|\\s+\\d{1,2}[/:]\\d).*$");
 
     public static Result parse(String title, String text, String defaultCurrency) {
         Result r = new Result();

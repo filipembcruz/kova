@@ -69,7 +69,10 @@ function Shell({ dark }: { dark: boolean }) {
         if (!st.settings.onboarded) return;
         const u = new URL(url);
         const what = u.host || u.pathname.replace(/^\/+/, '');
-        if (what === 'notif') {
+        if (what === 'notifsettings') {
+          const pkg = u.searchParams.get('enable') ?? undefined;
+          import('./components/NotifUI').then((m) => openOverlay(() => <m.NotifSettingsSheet enable={pkg} />));
+        } else if (what === 'notif') {
           const id = u.searchParams.get('id') ?? '';
           import('./lib/notif').then(async (n) => {
             await n.syncNotifs();

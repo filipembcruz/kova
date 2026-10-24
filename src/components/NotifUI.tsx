@@ -8,8 +8,8 @@ import { accountsSorted, fold } from '../lib/calc';
 import { Bubble, Sheet, Switch } from './ui';
 import { openOverlay, toast } from '../lib/nav';
 import { openTxEditor } from './TxEditor';
-import { confirmNotif, ignoreNotif, usePendingNotifs, syncNotifs, type NotifItem } from '../lib/notif';
-import { notifStatus, openNotifAccess, openBattery, notifSeen, parseTest, notificationsAllowed, isNative } from '../native';
+import { confirmNotif, ignoreNotif, usePendingNotifs, syncNotifs, enableAppNow, KNOWN_APPS, type NotifItem } from '../lib/notif';
+import { notifStatus, openNotifAccess, openBattery, notifSeen, parseTest, notificationsAllowed, isNative, notifLog, installedApps, type NotifLogEntry } from '../native';
 import { updateRates } from '../screens/Settings';
 
 /** Opens the editor pre-filled with a detected transaction; saving confirms it (and teaches Kova). */
@@ -65,23 +65,38 @@ function guessAccount(s: State, label: string) {
   return (list.find((a) => fold(a.name).includes(f) || f.includes(fold(a.name).split(/\s+/)[0])) ?? list[0])?.id ?? '';
 }
 
-export function NotifSettingsSheet() {
+export function NotifSettingsSheet({ enable }: { enable?: string } = {}) {
   const s = useStore();
   const { t, locale } = useT();
   const n = s.settings.notif ?? { on: false, apps: {} };
   const [st, setSt] = useState({ access: false, post: false, battery: true });
   const [seen, setSeen] = useState<Record<string, { label: string; last: number; n: number; sample?: string }>>({});
-  const refresh = () => { notifStatus().then(setSt); notifSeen().then(setSeen); };
+  const [installed, setInstalled] = useState<Record<string, string>>({});
+  const [log, setLog] = useState<NotifLogEntry[]>([]);
+  const refresh = () => { notifStatus().then(setSt); notifSeen().then(setSeen); notifLog().then(setLog); };
   useEffect(() => {
     refresh();
+    installedApps(Object.keys(KNOWN_APPS)).then(setInstalled);
+    const timer = setInterval(() => notifLog().then(setLog), 4000);
+    if (enable) {
+      const cur = getState().settings.notif ?? { on: true, apps: {} };
+      const label = KNOWN_APPS[enable] ?? enable;
+      setState((x) => ({ ...x, settings: { ...x.settings, notif: { on: true, apps: { ...cur.apps, [enable]: { on: true, acc: cur.apps[enable]?.acc || guessAccount(getState(), label), mode: cur.apps[enable]?.mode ?? 'smart', label: cur.apps[enable]?.label ?? label } } } } }));
+      setTimeout(() => enableAppNow(enable), 300);
+    }
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
     const fn = () => { if (document.visibilityState === 'visible') refresh(); };
     document.addEventListener('visibilitychange', fn);
     return () => document.removeEventListener('visibilitychange', fn);
   }, []);
   const save = (next: { on: boolean; apps: Record<string, NotifApp> }) => setState((x) => ({ ...x, settings: { ...x.settings, notif: next } }));
   const setApp = (pkg: string, patch: Partial<NotifApp>) => {
-    const cur = n.apps[pkg] ?? { on: false, acc: guessAccount(getState(), seen[pkg]?.label ?? pkg), mode: 'smart' as NotifMode, label: seen[pkg]?.label ?? pkg };
+    const label = seen[pkg]?.label ?? installed[pkg] ?? KNOWN_APPS[pkg] ?? pkg;
+    const cur = n.apps[pkg] ?? { on: false, acc: guessAccount(getState(), label), mode: 'smart' as NotifMode, label };
     save({ ...n, apps: { ...n.apps, [pkg]: { ...cur, ...patch } } });
+    if (patch.on) setTimeout(() => enableAppNow(pkg), 200);
   };
   const turnOn = async (v: boolean) => {
     save({ ...n, on: v });
@@ -92,10 +107,10 @@ export function NotifSettingsSheet() {
     }
   };
   const apps = useMemo(() => {
-    const keys = new Set([...Object.keys(seen), ...Object.keys(n.apps)]);
-    return [...keys].map((pkg) => ({ pkg, label: n.apps[pkg]?.label ?? seen[pkg]?.label ?? pkg, info: seen[pkg], cfg: n.apps[pkg] }))
-      .sort((a, b) => Number(!!b.cfg?.on) - Number(!!a.cfg?.on) || (b.info?.last ?? 0) - (a.info?.last ?? 0));
-  }, [seen, n.apps]);
+    const keys = new Set([...Object.keys(installed), ...Object.keys(seen), ...Object.keys(n.apps)]);
+    return [...keys].map((pkg) => ({ pkg, label: n.apps[pkg]?.label ?? seen[pkg]?.label ?? installed[pkg] ?? KNOWN_APPS[pkg] ?? pkg, info: seen[pkg], cfg: n.apps[pkg], bank: pkg in KNOWN_APPS }))
+      .sort((a, b) => Number(!!b.cfg?.on) - Number(!!a.cfg?.on) || Number(b.bank) - Number(a.bank) || (b.info?.last ?? 0) - (a.info?.last ?? 0));
+  }, [seen, n.apps, installed]);
   const accounts = accountsSorted(s.accounts).filter((a) => !a.archived);
   const learned = Object.keys(s.merchants ?? {}).length;
 
@@ -169,6 +184,27 @@ export function NotifSettingsSheet() {
                   )}
                 </div>
               ))}
+            </div>
+
+            <div className="label" style={{ marginTop: 16 }}>{t('nActivity')}</div>
+            <div className="paper flush">
+              {log.length === 0 && <div className="small muted" style={{ padding: 14 }}>{st.access ? t('nNoActivity') : t('nNoAccessYet')}</div>}
+              {log.slice(-10).reverse().map((e, k) => {
+                const [kind, info] = [e.result.split(':')[0], e.result.slice(e.result.indexOf(':') + 1)];
+                const txt = kind === 'pending' ? t('lgPending', { v: info }) : kind === 'auto' ? t('lgAuto', { v: info }) : kind === 'disabled' ? t('lgDisabled') : kind === 'off' ? t('lgOff')
+                  : kind === 'no-account' ? t('lgNoAcc') : kind === 'repeat' ? t('lgRepeat') : kind === 'dup' ? t('lgDup') : kind === 'blocked' ? t('lgBlocked') : t('lgNotTx', { r: info });
+                const good = kind === 'pending' || kind === 'auto';
+                return (
+                  <div key={k} className="logrow">
+                    <div className="row" style={{ gap: 8 }}>
+                      <b className="grow">{e.app}</b>
+                      <span className="small muted">{new Date(e.ts).toLocaleString(locale, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    <div className={'small ' + (good ? '' : 'muted')} style={{ color: good ? 'var(--inc)' : undefined, fontWeight: 600 }}>{txt}</div>
+                    <div className="small muted" style={{ whiteSpace: 'normal' }}>{e.text}</div>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="paper flush" style={{ marginTop: 16 }}>

@@ -31,7 +31,7 @@ public class KovaNotificationListener extends NotificationListenerService {
                 label = pm.getApplicationLabel(ai).toString();
             } catch (Exception ignored) { }
             if (sbn.isOngoing()) return; // music players, downloads, navigation…
-            NotifEngine.seen(this, pkg, label, (t + " — " + b).trim());
+            NotifEngine.seen(this, pkg, label, (t + " — " + b).trim(), t, b, sbn.getPostTime());
             NotifEngine.handle(this, pkg, label, t, b, sbn.getPostTime());
         } catch (Exception ignored) { }
     }

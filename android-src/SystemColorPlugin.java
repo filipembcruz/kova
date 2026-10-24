@@ -226,4 +226,41 @@ public class SystemColorPlugin extends Plugin {
         NotifEngine.status(getContext(), Boolean.TRUE.equals(call.getBoolean("show", false)), call.getString("title", "Kova"), call.getString("text", ""), call.getString("add", "+"));
         call.resolve();
     }
+
+    @PluginMethod
+    public void notifLog(PluginCall call) {
+        JSObject o = new JSObject();
+        o.put("data", NotifEngine.prefs(getContext()).getString("log", "[]"));
+        call.resolve(o);
+    }
+
+    /** Re-read the recent notifications of an app (after the brain with it turned on was saved). */
+    @PluginMethod
+    public void reprocessNotif(PluginCall call) {
+        final String pkg = call.getString("pkg", "");
+        final String brain = call.getString("brain", null);
+        if (brain != null) NotifEngine.prefs(getContext()).edit().putString("brain", brain).commit();
+        new Thread(() -> { try { NotifEngine.reprocess(getContext(), pkg); } catch (Exception ignored) { } }).start();
+        call.resolve();
+    }
+
+    /** Which of these packages are installed, with their names. */
+    @PluginMethod
+    public void installedApps(PluginCall call) {
+        JSObject out = new JSObject();
+        try {
+            JSONArray pk = new JSONArray(call.getString("pkgs", "[]"));
+            android.content.pm.PackageManager pm = getContext().getPackageManager();
+            for (int i = 0; i < pk.length(); i++) {
+                String p = pk.optString(i);
+                try {
+                    android.content.pm.ApplicationInfo ai = pm.getApplicationInfo(p, 0);
+                    out.put(p, pm.getApplicationLabel(ai).toString());
+                } catch (Exception ignored) { }
+            }
+        } catch (Exception ignored) { }
+        JSObject o = new JSObject();
+        o.put("data", out.toString());
+        call.resolve(o);
+    }
 }

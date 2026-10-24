@@ -110,6 +110,9 @@ const SystemColor = registerPlugin<{
   ackNotif(o: { ids: string }): Promise<void>;
   parseTest(o: { title: string; text: string; cur: string }): Promise<{ tx: boolean; cents: number; cur: string; kind: string; merchant: string; reason: string }>;
   setStatusNotif(o: { show: boolean; title: string; text: string; add: string }): Promise<void>;
+  notifLog(): Promise<{ data: string }>;
+  reprocessNotif(o: { pkg: string; brain: string }): Promise<void>;
+  installedApps(o: { pkgs: string }): Promise<{ data: string }>;
   authenticate(o: { title: string; cancel: string }): Promise<void>;
   getInsets(): Promise<Insets>;
   addListener(ev: string, cb: (i: any) => void): Promise<{ remove: () => void }>;
@@ -372,4 +375,17 @@ export async function parseTest(title: string, text: string, cur: string) {
 export function onNotifEvent(cb: () => void) { if (isNative()) SystemColor.addListener('notif', () => cb()).catch(() => {}); }
 export function setStatusNotif(show: boolean, title: string, text: string, add: string) {
   if (isNative()) SystemColor.setStatusNotif({ show, title, text, add }).catch(() => {});
+}
+
+export interface NotifLogEntry { pkg: string; app: string; ts: number; text: string; result: string }
+export async function notifLog(): Promise<NotifLogEntry[]> {
+  if (!isNative()) return [{ pkg: 'de.number26.android', app: 'N26', ts: Date.now() - 60000, text: 'Your payment of €6.76 to CDComercioDe has been successfully processed.', result: 'pending:€ 6,76 · CDComercioDe' }, { pkg: 'com.nu.production', app: 'Nubank', ts: Date.now() - 3600000, text: 'Aproveite: 20% off', result: 'not-tx:promo' }];
+  try { return JSON.parse((await SystemColor.notifLog()).data || '[]'); } catch { return []; }
+}
+export async function reprocessNotif(pkg: string, brain: string) {
+  if (isNative()) await SystemColor.reprocessNotif({ pkg, brain }).catch(() => {});
+}
+export async function installedApps(pkgs: string[]): Promise<Record<string, string>> {
+  if (!isNative()) return { 'de.number26.android': 'N26', 'com.revolut.revolut': 'Revolut' };
+  try { return JSON.parse((await SystemColor.installedApps({ pkgs: JSON.stringify(pkgs) })).data || '{}'); } catch { return {}; }
 }

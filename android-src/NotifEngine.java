@@ -47,7 +47,9 @@ public final class NotifEngine {
     }
 
     /** Remembers which apps post notifications, so the user can pick them in Settings. */
-    static synchronized void seen(Context c, String pkg, String label, String sample) {
+    static synchronized void seen(Context c, String pkg, String label, String sample) { seen(c, pkg, label, sample, null, null, System.currentTimeMillis()); }
+
+    static synchronized void seen(Context c, String pkg, String label, String sample, String title, String body, long when) {
         SharedPreferences p = prefs(c);
         JSONObject s = obj(p, "seen");
         try {
@@ -57,6 +59,13 @@ public final class NotifEngine {
             e.put("last", System.currentTimeMillis());
             e.put("n", e.optInt("n") + 1);
             if (sample != null && !sample.isEmpty()) e.put("sample", sample.length() > 160 ? sample.substring(0, 160) : sample);
+            if (title != null || body != null) {
+                JSONArray rec = e.optJSONArray("recent");
+                if (rec == null) rec = new JSONArray();
+                rec.put(new JSONObject().put("t", title == null ? "" : title).put("b", body == null ? "" : body).put("ts", when));
+                while (rec.length() > 5) rec.remove(0);
+                e.put("recent", rec);
+            }
             s.put(pkg, e);
             if (s.length() > 80) { // drop the oldest
                 String oldest = null; long t = Long.MAX_VALUE;
@@ -77,27 +86,34 @@ public final class NotifEngine {
     static synchronized void handle(Context c, String pkg, String label, String title, String text, long when) {
         SharedPreferences p = prefs(c);
         JSONObject brain = obj(p, "brain");
-        if (!brain.optBoolean("on")) return;
+        if (!brain.optBoolean("on")) { log(c, pkg, label, text, when, "off"); return; }
         JSONObject app = brain.optJSONObject("apps") != null ? brain.optJSONObject("apps").optJSONObject(pkg) : null;
-        if (app == null || !app.optBoolean("on")) return;
+        if (app == null || !app.optBoolean("on")) {
+            TxParser.Result pr = TxParser.parse(title, text, "");
+            if (pr.tx) {
+                log(c, pkg, label, text, when, "disabled");
+                if (app == null) askEnable(c, brain, pkg, label, pr);
+            }
+            return;
+        }
 
         // same notification posted again / updated → ignore
         String hash = Integer.toHexString((pkg + "|" + title + "|" + text).hashCode());
         JSONArray hashes = arr(p, "hashes");
-        for (int i = 0; i < hashes.length(); i++) if (hash.equals(hashes.optString(i))) return;
+        for (int i = 0; i < hashes.length(); i++) if (hash.equals(hashes.optString(i))) { log(c, pkg, label, text, when, "repeat"); return; }
         hashes.put(hash);
         while (hashes.length() > 300) hashes.remove(0);
         p.edit().putString("hashes", hashes.toString()).apply();
 
         String accId = app.optString("acc");
         JSONObject acc = brain.optJSONObject("accounts") != null ? brain.optJSONObject("accounts").optJSONObject(accId) : null;
-        if (acc == null) return;
+        if (acc == null) { log(c, pkg, label, text, when, "no-account"); return; }
         String accCur = acc.optString("cur");
 
         TxParser.Result r = TxParser.parse(title, text, accCur);
-        if (!r.tx) return;
+        if (!r.tx) { log(c, pkg, label, text, when, "not-tx:" + r.reason); return; }
         JSONArray blocked = brain.optJSONObject("blocked") != null ? brain.optJSONObject("blocked").optJSONArray(pkg) : null;
-        if (blocked != null) for (int i = 0; i < blocked.length(); i++) if (r.tpl.equals(blocked.optString(i))) return;
+        if (blocked != null) for (int i = 0; i < blocked.length(); i++) if (r.tpl.equals(blocked.optString(i))) { log(c, pkg, label, text, when, "blocked"); return; }
 
         // amount in the account's currency
         String cur = r.currency.isEmpty() ? accCur : r.currency;
@@ -113,7 +129,7 @@ public final class NotifEngine {
         // same purchase twice in a short time (e.g. bank + wallet app) → keep one
         for (int i = 0; i < queue.length(); i++) {
             JSONObject q = queue.optJSONObject(i);
-            if (q != null && q.optLong("cents") == r.cents && q.optString("mkey").equals(r.mkey) && Math.abs(q.optLong("ts") - when) < 15 * 60_000) return;
+            if (q != null && q.optLong("cents") == r.cents && q.optString("mkey").equals(r.mkey) && Math.abs(q.optLong("ts") - when) < 15 * 60_000) { log(c, pkg, label, text, when, "dup"); return; }
         }
         boolean dup = false;
         JSONArray recent = brain.optJSONArray("recent");
@@ -170,9 +186,62 @@ public final class NotifEngine {
         while (queue.length() > 200) queue.remove(0);
         p.edit().putString("queue", queue.toString()).apply();
 
+        log(c, pkg, label, text, when, (auto ? "auto:" : "pending:") + fmt(brain, r.cents, cur) + (r.merchant.isEmpty() ? "" : " · " + r.merchant));
         if (auto && "expense".equals(r.kind)) widgetDelta(c, brain, amt, accCur);
         post(c, brain, item);
         SystemColorPlugin.ping();
+    }
+
+    /** What happened to each notification read (shown in Settings → Automatic entries). */
+    static synchronized void log(Context c, String pkg, String label, String text, long when, String result) {
+        SharedPreferences p = prefs(c);
+        JSONArray l = arr(p, "log");
+        try {
+            String t = text == null ? "" : text;
+            l.put(new JSONObject().put("pkg", pkg).put("app", label).put("ts", when).put("text", t.length() > 140 ? t.substring(0, 140) : t).put("result", result));
+        } catch (Exception ignored) { }
+        while (l.length() > 40) l.remove(0);
+        p.edit().putString("log", l.toString()).apply();
+    }
+
+    /** A purchase came from an app that is not turned on yet: offer to turn it on (once per app). */
+    @SuppressLint("MissingPermission")
+    static void askEnable(Context c, JSONObject brain, String pkg, String label, TxParser.Result r) {
+        SharedPreferences p = prefs(c);
+        JSONArray asked = arr(p, "asked");
+        for (int i = 0; i < asked.length(); i++) if (pkg.equals(asked.optString(i))) return;
+        asked.put(pkg);
+        p.edit().putString("asked", asked.toString()).apply();
+        if (!NotificationManagerCompat.from(c).areNotificationsEnabled()) return;
+        channels(c, brain);
+        JSONObject L = brain.optJSONObject("labels");
+        if (L == null) L = new JSONObject();
+        String amount = r.currency.isEmpty() ? String.format(Locale.US, "%.2f", r.cents / 100.0) : fmt(brain, r.cents, r.currency);
+        String url = "kova://notifsettings?enable=" + Uri.encode(pkg);
+        Notification n = new NotificationCompat.Builder(c, CH_TX)
+            .setSmallIcon(R.drawable.ic_stat_kova).setColor(0xFF5B3DF5)
+            .setContentTitle(L.optString("askTitle", "Purchase detected in {a}").replace("{a}", label) + " · " + amount)
+            .setContentText(L.optString("askText", "Turn on reading for this app?"))
+            .setAutoCancel(true)
+            .setContentIntent(open(c, url, pkg.hashCode()))
+            .addAction(0, L.optString("enable", "Turn on"), open(c, url, pkg.hashCode() + 1))
+            .build();
+        try { NotificationManagerCompat.from(c).notify(pkg.hashCode(), n); } catch (SecurityException ignored) { }
+    }
+
+    /** Re-read the last notifications of an app that was just turned on. */
+    static void reprocess(Context c, String pkg) {
+        JSONObject s = obj(prefs(c), "seen");
+        JSONObject e = s.optJSONObject(pkg);
+        if (e == null) return;
+        JSONArray rec = e.optJSONArray("recent");
+        if (rec == null) return;
+        long since = System.currentTimeMillis() - 3 * 24 * 3600_000L;
+        for (int i = 0; i < rec.length(); i++) {
+            JSONObject o = rec.optJSONObject(i);
+            if (o == null || o.optLong("ts") < since) continue;
+            handle(c, pkg, e.optString("label", pkg), o.optString("t"), o.optString("b"), o.optLong("ts"));
+        }
     }
 
     /** Our own notification for a detected transaction. */
