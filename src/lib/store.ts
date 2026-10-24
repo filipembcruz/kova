@@ -68,6 +68,7 @@ export async function loadState() {
 /** Daily housekeeping: create next occurrences of recurring items and write the automatic backup. */
 export async function maintenance() {
   syncReminders(state);
+  import('./widget').then((w) => w.syncWidget(state)).catch(() => {});
   const next = ensureRecurring(state);
   if (next !== state) {
     state = next;
@@ -150,6 +151,7 @@ function migrate(s: State): State {
 
 function persist() {
   syncReminders(state);
+  import('./widget').then((w) => w.syncWidget(state)).catch(() => {});
   scheduleBackup();
   saveSoon();
 }

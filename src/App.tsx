@@ -12,10 +12,11 @@ import { Categories } from './screens/Categories';
 import { Settings, runMmImport, updateRates, restoreFromFile } from './screens/Settings';
 import { Transactions } from './screens/Transactions';
 import { Bills } from './screens/Bills';
-import { setStatusBar, setHaptics, takeCrashNote, listAutoBackups, readAutoBackup, type BackupEntry } from './native';
+import { setStatusBar, setHaptics, takeCrashNote, listAutoBackups, readAutoBackup, initDeepLinks, type BackupEntry } from './native';
+import { launchShortcut } from './components/Shortcuts';
 import { LockScreen } from './components/Lock';
 import { applyBackupText, restoreError } from './screens/Settings';
-import { openOverlay, toast, getAddKind } from './lib/nav';
+import { openOverlay, toast, getAddKind, navigate } from './lib/nav';
 import { Sheet } from './components/ui';
 
 function useTheme() {
@@ -61,6 +62,21 @@ function Shell({ dark }: { dark: boolean }) {
   const s = useStore();
   useSystemBars(dark, s.settings.onboarded);
   useEffect(() => { setHaptics(s.settings.haptics !== false); }, [s.settings.haptics]);
+  useEffect(() => {
+    initDeepLinks((url) => {
+      try {
+        const st = getState();
+        if (!st.settings.onboarded) return;
+        const u = new URL(url);
+        const what = u.host || u.pathname.replace(/^\/+/, '');
+        if (what === 'add') {
+          const sc = (st.shortcuts ?? []).find((x) => x.id === u.searchParams.get('sc'));
+          if (sc) launchShortcut(sc);
+          else openTxEditor({ kind: (u.searchParams.get('kind') as 'expense' | 'income') || 'expense' });
+        } else navigate('/', true);
+      } catch { /* ignore */ }
+    });
+  }, []);
   useEffect(() => {
     takeCrashNote().then((txt) => { if (txt) openOverlay(() => <CrashSheet text={txt} />); });
   }, []);

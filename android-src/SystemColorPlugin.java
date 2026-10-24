@@ -124,4 +124,12 @@ public class SystemColorPlugin extends Plugin {
             }
         });
     }
+
+    /** Saves the widget summary sent by the app and redraws the home-screen widgets. */
+    @PluginMethod
+    public void setWidget(PluginCall call) {
+        getContext().getSharedPreferences(KovaWidget.PREFS, 0).edit().putString("data", call.getString("data", "{}")).apply();
+        try { KovaWidget.updateAll(getContext()); } catch (Exception ignored) { }
+        call.resolve();
+    }
 }

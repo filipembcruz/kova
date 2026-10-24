@@ -100,6 +100,7 @@ const SystemColor = registerPlugin<{
   set(o: { color: string; dark: boolean; navDark?: boolean }): Promise<void>;
   openFile(o: { path: string; mime: string }): Promise<void>;
   biometricAvailable(): Promise<{ available: boolean }>;
+  setWidget(o: { data: string }): Promise<void>;
   authenticate(o: { title: string; cancel: string }): Promise<void>;
   getInsets(): Promise<Insets>;
   addListener(ev: 'insets', cb: (i: Insets) => void): Promise<{ remove: () => void }>;
@@ -328,4 +329,15 @@ export async function biometricAvailable() {
 export async function biometricAuth(title: string, cancel: string) {
   if (!isNative()) return false;
   try { await SystemColor.authenticate({ title, cancel }); return true; } catch { return false; }
+}
+
+// ---------- home-screen widget + links from it (kova://add?kind=expense, kova://add?sc=ID, kova://home) ----------
+export function updateWidget(data: string) {
+  if (!isNative()) return;
+  SystemColor.setWidget({ data }).catch(() => {});
+}
+export function initDeepLinks(handler: (url: string) => void) {
+  if (!isNative()) return;
+  CapApp.addListener('appUrlOpen', (e: { url: string }) => handler(e.url));
+  CapApp.getLaunchUrl().then((r: { url?: string } | undefined) => { if (r?.url) handler(r.url); }).catch(() => {});
 }

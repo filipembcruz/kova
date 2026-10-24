@@ -43,6 +43,8 @@ jobs:
           mkdir -p $JAVA_DIR
           cp android-src/*.java $JAVA_DIR/
           sed -i 's/<application/<application android:largeHeap="true"/' android/app/src/main/AndroidManifest.xml
+          python3 -c "p='android/app/src/main/AndroidManifest.xml'; s=open(p).read(); s=s.replace('</application>', open('android-manifest/widgets.xml').read() + '    </application>', 1); open(p,'w').write(s)"
+          grep -n "KovaWidget\|launchMode" android/app/src/main/AndroidManifest.xml
           sed -i '/^dependencies {/a\    implementation "androidx.biometric:biometric:1.1.0"' android/app/build.gradle
           grep -n biometric android/app/build.gradle
           cat android/app/src/main/res/xml/file_paths.xml || true

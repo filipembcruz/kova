@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { PiUserDuotone, PiTranslateDuotone, PiPaletteDuotone, PiCurrencyCircleDollarDuotone, PiArrowsClockwiseBold, PiEyeSlashDuotone, PiCalendarDuotone, PiDownloadSimpleDuotone, PiFileCsvDuotone, PiTrashDuotone, PiHeartDuotone, PiCaretRightBold, PiTagDuotone, PiSwapDuotone, PiCloudCheckDuotone, PiHashDuotone, PiReceiptDuotone, PiShareNetworkDuotone, PiClockCounterClockwiseDuotone, PiVibrateDuotone, PiSquaresFourDuotone, PiChatTextDuotone, PiMagnifyingGlassBold, PiLockKeyDuotone, PiFingerprintDuotone, PiLightningDuotone } from 'react-icons/pi';
+import { PiUserDuotone, PiTranslateDuotone, PiPaletteDuotone, PiCurrencyCircleDollarDuotone, PiArrowsClockwiseBold, PiEyeSlashDuotone, PiCalendarDuotone, PiDownloadSimpleDuotone, PiFileCsvDuotone, PiTrashDuotone, PiHeartDuotone, PiCaretRightBold, PiTagDuotone, PiSwapDuotone, PiCloudCheckDuotone, PiHashDuotone, PiReceiptDuotone, PiShareNetworkDuotone, PiClockCounterClockwiseDuotone, PiVibrateDuotone, PiSquareHalfBottomDuotone, PiSquaresFourDuotone, PiChatTextDuotone, PiMagnifyingGlassBold, PiLockKeyDuotone, PiFingerprintDuotone, PiLightningDuotone } from 'react-icons/pi';
 import type { State } from '../lib/types';
 import { getState, replaceState, setState, useStore, backupNow } from '../lib/store';
 import { useT } from '../i18n';
@@ -288,6 +288,16 @@ export function Settings() {
           <div className="grow"><div className="t">{t('manageCategories')}</div></div>
           <PiCaretRightBold className="muted" />
         </button>
+      </div>
+
+      <div className="section-title">{t('widget')}</div>
+      <div className="paper flush">
+        <div className="setting">
+          <Ico><PiSquareHalfBottomDuotone /></Ico>
+          <div className="grow"><div className="t">{t('widgetShow')}</div><div className="s">{t('widgetShowD')}</div></div>
+          <Switch on={st.widgetHide !== true} onChange={(v) => set({ widgetHide: !v })} />
+        </div>
+        <div className="small muted" style={{ padding: '0 16px 14px' }}>{t('widgetHow')}</div>
       </div>
 
       <div className="section-title">{t('autoBackup')}</div>

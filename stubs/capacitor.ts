@@ -20,7 +20,7 @@ export const Style = { Dark: 'DARK', Light: 'LIGHT' } as const;
 export const Haptics = { impact: async (_: unknown) => {} };
 export const ImpactStyle = { Light: 'LIGHT' } as const;
 export const Keyboard = { addListener: (_: string, __: (i: { keyboardHeight: number }) => void) => ({ remove: () => {} }) };
-export const App = { addListener: (_: string, __: () => void) => ({ remove: () => {} }), minimizeApp: async () => {} };
+export const App = { addListener: (_: string, __: (e: any) => void) => ({ remove: () => {} }), minimizeApp: async () => {}, getLaunchUrl: async () => undefined as { url?: string } | undefined };
 export const LocalNotifications = {
   checkPermissions: async () => ({ display: 'denied' as string }),
   requestPermissions: async () => ({ display: 'denied' as string }),
