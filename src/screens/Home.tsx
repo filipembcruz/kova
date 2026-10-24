@@ -13,6 +13,7 @@ import { openTxEditor } from '../components/TxEditor';
 import { goTx } from './Transactions';
 import { upcomingBills } from '../lib/reminders';
 import { ShortcutStrip } from '../components/Shortcuts';
+import { PendingCard } from '../components/NotifUI';
 
 export function Home() {
   const s = useStore();
@@ -67,8 +68,17 @@ export function Home() {
     const elapsed = buckets.filter((b) => b.key <= now.slice(0, b.key.length)).length || buckets.length;
     const avg = totalP / Math.max(1, elapsed);
     const isCurrent = period.start <= now && now <= period.end;
-    const prevTotal = sum(filterTx(s, shiftPeriod(period, -1, s.settings.weekStart), kind, accOpt));
-    return { buckets, avg, total: totalP, byMonth, projection: isCurrent ? Math.round(avg * buckets.length) : null, change: prevTotal ? ((totalP - prevTotal) / prevTotal) * 100 : null };
+    const prevP = shiftPeriod(period, -1, s.settings.weekStart);
+    // current period: compare up to the same point (day 1–24 vs day 1–24), not against the whole previous period
+    let cmpNow = totalP, prevTotal = 0, sameLabel: string | null = null;
+    if (isCurrent) {
+      const offset = Math.round((parseIso(now).getTime() - parseIso(period.start).getTime()) / 864e5);
+      const prevEnd = addDays(prevP.start, offset) < prevP.end ? addDays(prevP.start, offset) : prevP.end;
+      cmpNow = sum(txs.filter((x) => x.date <= now));
+      prevTotal = sum(filterTx(s, { start: prevP.start, end: prevEnd }, kind, accOpt));
+      if (period.gran === 'month') sameLabel = t('vsSameDay', { d: String(parseIso(prevEnd).getDate()), m: parseIso(prevP.start).toLocaleDateString(locale, { month: 'short' }).replace('.', '') });
+    } else prevTotal = sum(filterTx(s, prevP, kind, accOpt));
+    return { buckets, avg, total: totalP, byMonth, projection: isCurrent ? Math.round(avg * buckets.length) : null, change: prevTotal ? ((cmpNow - prevTotal) / prevTotal) * 100 : null, sameLabel };
   }, [s.txs, period, kind, accId, locale]);
 
   const bills = useMemo(() => upcomingBills(s).filter((x) => !accId || x.accountId === accId).slice(0, 4), [s.txs, accId]);
@@ -185,7 +195,7 @@ export function Home() {
             {kind === 'expense' ? t('spendingPace') : t('incomePace')}
             {pace.change !== null && Math.abs(pace.change) >= 1 && (
               <span className={'tag ' + ((kind === 'expense' ? pace.change > 0 : pace.change < 0) ? 'red' : 'green')} style={{ marginLeft: 'auto' }}>
-                {pace.change > 300 ? '>300' : `${pace.change > 0 ? '+' : ''}${Math.round(pace.change)}`}% {t('vsPrevPeriod')}
+                {pace.change > 300 ? '>300' : `${pace.change > 0 ? '+' : ''}${Math.round(pace.change)}`}% {pace.sameLabel ?? t('vsPrevPeriod')}
               </span>
             )}
           </h3>
@@ -197,6 +207,8 @@ export function Home() {
           </div>
         </div>
       )}
+
+      <PendingCard />
 
       {(bills.length > 0 || planned.length > 0) && (
         <>

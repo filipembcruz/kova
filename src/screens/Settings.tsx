@@ -11,6 +11,7 @@ import { pickFile, saveTextFile, listAutoBackups, readAutoBackup, type BackupEnt
 import { today, fold } from '../lib/calc';
 import { PinSheet, setPin } from '../components/Lock';
 import { ShortcutsSheet } from '../components/Shortcuts';
+import { NotifSettingsSheet } from '../components/NotifUI';
 import { biometricAvailable } from '../native';
 
 declare const __APP_VERSION__: string;
@@ -21,7 +22,7 @@ function Ico({ children }: { c?: string; children: React.ReactNode }) {
 export async function updateRates(failMsg?: string) {
   const s = getState();
   const base = s.settings.baseCurrency;
-  const needed = [...new Set(s.accounts.map((a) => a.currency).filter((c) => c !== base))];
+  const needed = [...new Set([...s.accounts.map((a) => a.currency), ...(s.settings.notif?.on ? ['BRL', 'EUR', 'USD', 'GBP'] : [])].filter((c) => c !== base))];
   const urls = [`https://api.frankfurter.dev/v1/latest?base=${base}`, `https://open.er-api.com/v6/latest/${base}`];
   for (const u of urls) {
     try {
@@ -286,6 +287,15 @@ export function Settings() {
         <button className="setting" onClick={() => navigate('/categories')}>
           <Ico c="linear-gradient(145deg,#e7a1ff,#b57bff)"><PiTagDuotone /></Ico>
           <div className="grow"><div className="t">{t('manageCategories')}</div></div>
+          <PiCaretRightBold className="muted" />
+        </button>
+      </div>
+
+      <div className="section-title">{t('autoEntry')}</div>
+      <div className="paper flush">
+        <button className="setting" onClick={() => openOverlay(() => <NotifSettingsSheet />)}>
+          <Ico><PiLightningDuotone /></Ico>
+          <div className="grow"><div className="t">{t('autoEntry')}</div><div className="s">{st.notif?.on ? Object.values(st.notif.apps).filter((a) => a.on).map((a) => a.label).join(', ') || t('autoEntryD') : t('autoEntryD')}</div></div>
           <PiCaretRightBold className="muted" />
         </button>
       </div>

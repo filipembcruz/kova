@@ -433,3 +433,11 @@ input, textarea { user-select: text; }
 .amount-box .val .caret { display: inline-block; width: 3px; height: .9em; margin-left: 4px; vertical-align: -.08em; background: var(--brand); border-radius: 2px; animation: blink 1s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
 .bubble.more { width: 50px; height: 50px; --c: #8b86a0; }
+
+.item.pend { align-items: center; }
+.item.pend .amt { font-size: 15px; }
+.pend-act { display: flex; gap: 6px; flex: none; }
+.pend-act button { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--sunk); color: var(--ink2); }
+.pend-act button.ok { background: var(--brand); color: #fff; }
+.pend-act button svg { width: 18px; height: 18px; }
+.napp + .napp { border-top: 1px solid var(--line, rgba(0,0,0,.06)); }

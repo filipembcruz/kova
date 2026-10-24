@@ -69,6 +69,7 @@ export async function loadState() {
 export async function maintenance() {
   syncReminders(state);
   import('./widget').then((w) => w.syncWidget(state)).catch(() => {});
+  import('./notif').then((n) => n.pushBrain(state)).catch(() => {});
   const next = ensureRecurring(state);
   if (next !== state) {
     state = next;
@@ -152,6 +153,7 @@ function migrate(s: State): State {
 function persist() {
   syncReminders(state);
   import('./widget').then((w) => w.syncWidget(state)).catch(() => {});
+  import('./notif').then((n) => n.pushBrain(state)).catch(() => {});
   scheduleBackup();
   saveSoon();
 }

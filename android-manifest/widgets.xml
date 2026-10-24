@@ -6,3 +6,8 @@
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_small_info" />
         </receiver>
+        <service android:name=".KovaNotificationListener" android:exported="true" android:label="Kova"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter>
+        </service>
+        <receiver android:name=".KovaActionReceiver" android:exported="false" />

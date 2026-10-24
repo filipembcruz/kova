@@ -101,9 +101,18 @@ const SystemColor = registerPlugin<{
   openFile(o: { path: string; mime: string }): Promise<void>;
   biometricAvailable(): Promise<{ available: boolean }>;
   setWidget(o: { data: string }): Promise<void>;
+  notifStatus(): Promise<{ access: boolean; post: boolean; battery: boolean }>;
+  openNotifAccess(): Promise<void>;
+  openBattery(): Promise<void>;
+  notifSeen(): Promise<{ data: string }>;
+  setNotifBrain(o: { data: string }): Promise<void>;
+  getNotifQueue(): Promise<{ data: string }>;
+  ackNotif(o: { ids: string }): Promise<void>;
+  parseTest(o: { title: string; text: string; cur: string }): Promise<{ tx: boolean; cents: number; cur: string; kind: string; merchant: string; reason: string }>;
+  setStatusNotif(o: { show: boolean; title: string; text: string; add: string }): Promise<void>;
   authenticate(o: { title: string; cancel: string }): Promise<void>;
   getInsets(): Promise<Insets>;
-  addListener(ev: 'insets', cb: (i: Insets) => void): Promise<{ remove: () => void }>;
+  addListener(ev: string, cb: (i: any) => void): Promise<{ remove: () => void }>;
 }>('SystemColor');
 
 let nativeInsets = false;
@@ -340,4 +349,27 @@ export function initDeepLinks(handler: (url: string) => void) {
   if (!isNative()) return;
   CapApp.addListener('appUrlOpen', (e: { url: string }) => handler(e.url));
   CapApp.getLaunchUrl().then((r: { url?: string } | undefined) => { if (r?.url) handler(r.url); }).catch(() => {});
+}
+
+// ---------- bank notifications ----------
+export async function notifStatus() {
+  if (!isNative()) return { access: false, post: false, battery: true };
+  try { return await SystemColor.notifStatus(); } catch { return { access: false, post: false, battery: true }; }
+}
+export const openNotifAccess = () => { if (isNative()) SystemColor.openNotifAccess().catch(() => {}); };
+export const openBattery = () => { if (isNative()) SystemColor.openBattery().catch(() => {}); };
+export async function notifSeen(): Promise<Record<string, { label: string; last: number; n: number; sample?: string }>> {
+  if (!isNative()) return { 'com.nu.production': { label: 'Nubank', last: Date.now(), n: 12, sample: 'Compra de R$ 35,57 APROVADA em SUPERMERCADO BH' }, 'de.number26.android': { label: 'N26', last: Date.now(), n: 5, sample: 'Pagamento de 6,25 € em Pingo Doce' }, 'com.whatsapp': { label: 'WhatsApp', last: Date.now(), n: 80 } };
+  try { return JSON.parse((await SystemColor.notifSeen()).data || '{}'); } catch { return {}; }
+}
+export function setNotifBrain(data: string) { if (isNative()) SystemColor.setNotifBrain({ data }).catch(() => {}); }
+export async function getNotifQueue() { return (await SystemColor.getNotifQueue()).data; }
+export async function ackNotif(ids: string) { await SystemColor.ackNotif({ ids }).catch(() => {}); }
+export async function parseTest(title: string, text: string, cur: string) {
+  if (!isNative()) return null;
+  try { return await SystemColor.parseTest({ title, text, cur }); } catch { return null; }
+}
+export function onNotifEvent(cb: () => void) { if (isNative()) SystemColor.addListener('notif', () => cb()).catch(() => {}); }
+export function setStatusNotif(show: boolean, title: string, text: string, add: string) {
+  if (isNative()) SystemColor.setStatusNotif({ show, title, text, add }).catch(() => {});
 }

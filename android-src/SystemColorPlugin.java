@@ -10,6 +10,12 @@ import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.fragment.app.FragmentActivity;
 import java.io.File;
+import android.content.ComponentName;
+import android.os.PowerManager;
+import android.provider.Settings;
+import androidx.core.app.NotificationManagerCompat;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import android.view.View;
 import android.view.Window;
 import androidx.core.graphics.Insets;
@@ -30,9 +36,17 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 @CapacitorPlugin(name = "SystemColor")
 public class SystemColorPlugin extends Plugin {
     private JSObject last = new JSObject();
+    private static SystemColorPlugin instance;
+
+    /** Tells the open app that the notification queue changed. */
+    static void ping() {
+        SystemColorPlugin p = instance;
+        if (p != null) try { p.notifyListeners("notif", new JSObject()); } catch (Exception ignored) { }
+    }
 
     @Override
     public void load() {
+        instance = this;
         final View wv = getBridge().getWebView();
         ViewCompat.setOnApplyWindowInsetsListener(wv, (v, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
@@ -128,8 +142,88 @@ public class SystemColorPlugin extends Plugin {
     /** Saves the widget summary sent by the app and redraws the home-screen widgets. */
     @PluginMethod
     public void setWidget(PluginCall call) {
-        getContext().getSharedPreferences(KovaWidget.PREFS, 0).edit().putString("data", call.getString("data", "{}")).apply();
+        getContext().getSharedPreferences(KovaWidget.PREFS, 0).edit().putString("data", call.getString("data", "{}")).putLong("delta", 0).apply();
         try { KovaWidget.updateAll(getContext()); } catch (Exception ignored) { }
+        call.resolve();
+    }
+
+    // ---------- reading bank notifications ----------
+    @PluginMethod
+    public void notifStatus(PluginCall call) {
+        JSObject o = new JSObject();
+        o.put("access", NotificationManagerCompat.getEnabledListenerPackages(getContext()).contains(getContext().getPackageName()));
+        o.put("post", NotificationManagerCompat.from(getContext()).areNotificationsEnabled());
+        boolean battery = true;
+        try {
+            PowerManager pm = (PowerManager) getContext().getSystemService(android.content.Context.POWER_SERVICE);
+            battery = pm.isIgnoringBatteryOptimizations(getContext().getPackageName());
+        } catch (Exception ignored) { }
+        o.put("battery", battery);
+        call.resolve(o);
+    }
+
+    @PluginMethod
+    public void openNotifAccess(PluginCall call) {
+        try {
+            Intent i = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getActivity().startActivity(i);
+            call.resolve();
+        } catch (Exception e) { call.reject(String.valueOf(e.getMessage())); }
+    }
+
+    @PluginMethod
+    public void openBattery(PluginCall call) {
+        try {
+            Intent i = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getActivity().startActivity(i);
+            call.resolve();
+        } catch (Exception e) { call.reject(String.valueOf(e.getMessage())); }
+    }
+
+    @PluginMethod
+    public void notifSeen(PluginCall call) {
+        JSObject o = new JSObject();
+        o.put("data", NotifEngine.prefs(getContext()).getString("seen", "{}"));
+        call.resolve(o);
+    }
+
+    @PluginMethod
+    public void setNotifBrain(PluginCall call) {
+        NotifEngine.prefs(getContext()).edit().putString("brain", call.getString("data", "{}")).apply();
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void getNotifQueue(PluginCall call) {
+        JSObject o = new JSObject();
+        o.put("data", NotifEngine.prefs(getContext()).getString("queue", "[]"));
+        call.resolve(o);
+    }
+
+    @PluginMethod
+    public void ackNotif(PluginCall call) {
+        try { NotifEngine.ack(getContext(), new JSONArray(call.getString("ids", "[]"))); } catch (Exception ignored) { }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void parseTest(PluginCall call) {
+        TxParser.Result r = TxParser.parse(call.getString("title", ""), call.getString("text", ""), call.getString("cur", ""));
+        JSObject o = new JSObject();
+        o.put("tx", r.tx);
+        o.put("cents", r.cents);
+        o.put("cur", r.currency);
+        o.put("kind", r.kind);
+        o.put("merchant", r.merchant);
+        o.put("reason", r.reason);
+        call.resolve(o);
+    }
+
+    @PluginMethod
+    public void setStatusNotif(PluginCall call) {
+        NotifEngine.status(getContext(), Boolean.TRUE.equals(call.getBoolean("show", false)), call.getString("title", "Kova"), call.getString("text", ""), call.getString("add", "+"));
         call.resolve();
     }
 }

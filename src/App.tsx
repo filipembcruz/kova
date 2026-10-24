@@ -69,7 +69,15 @@ function Shell({ dark }: { dark: boolean }) {
         if (!st.settings.onboarded) return;
         const u = new URL(url);
         const what = u.host || u.pathname.replace(/^\/+/, '');
-        if (what === 'add') {
+        if (what === 'notif') {
+          const id = u.searchParams.get('id') ?? '';
+          import('./lib/notif').then(async (n) => {
+            await n.syncNotifs();
+            const it = n.findPending(id);
+            if (it) (await import('./components/NotifUI')).editNotif(it);
+            else navigate('/', true);
+          });
+        } else if (what === 'add') {
           const sc = (st.shortcuts ?? []).find((x) => x.id === u.searchParams.get('sc'));
           if (sc) launchShortcut(sc);
           else openTxEditor({ kind: (u.searchParams.get('kind') as 'expense' | 'income') || 'expense' });
@@ -77,6 +85,9 @@ function Shell({ dark }: { dark: boolean }) {
       } catch { /* ignore */ }
     });
   }, []);
+  useEffect(() => {
+    if (s.settings.onboarded) import('./lib/notif').then((n) => n.startNotifSync());
+  }, [s.settings.onboarded]);
   useEffect(() => {
     takeCrashNote().then((txt) => { if (txt) openOverlay(() => <CrashSheet text={txt} />); });
   }, []);

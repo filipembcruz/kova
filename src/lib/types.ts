@@ -42,6 +42,8 @@ export interface Tx {
   done?: boolean; // future-dated but already paid/received: counts in the balance now
   remind?: number; // days before the due date to notify (recurring bills); undefined = no reminder
   attachments?: Attachment[];
+  src?: 'notif'; // created from a bank notification
+  nid?: string; // id of that detection
 }
 
 export interface Attachment {
@@ -87,6 +89,8 @@ export interface Settings {
   biometric?: boolean;
   catRows?: number; // category rows shown in the transaction editor (0 = all, default 2)
   widgetHide?: boolean; // show •••• instead of values on the home-screen widget
+  notif?: NotifSettings;
+  statusNotif?: boolean; // ongoing notification with the month total
   shortcutsOn?: boolean; // shortcut chips on Home + ⚡ in the editor (default on)
   haptics?: boolean; // vibrate on taps (default on)
   showTags?: boolean; // tags field in the transaction editor (default on)
@@ -99,6 +103,8 @@ export interface State {
   txs: Tx[];
   transfers: Transfer[];
   shortcuts?: Shortcut[];
+  merchants?: Record<string, Merchant>; // learned from bank notifications: 'kind|merchant key' → choice
+  notifBlocked?: Record<string, string[]>; // per app: message shapes that are not transactions
   settings: Settings;
 }
 
@@ -111,3 +117,8 @@ export interface Shortcut {
   amount?: Cents; // fixed amount, optional
   note: string;
 }
+
+export interface Merchant { cat: string; note: string; acc: string; n: number; name?: string }
+export type NotifMode = 'ask' | 'smart' | 'auto';
+export interface NotifApp { on: boolean; acc: string; mode: NotifMode; label: string }
+export interface NotifSettings { on: boolean; apps: Record<string, NotifApp> }

@@ -15,7 +15,7 @@ import { fold } from '../lib/calc';
 
 type Mode = Kind | 'transfer';
 
-export function openTxEditor(opts: { tx?: Tx; transfer?: Transfer; kind?: Mode; accountId?: string; categoryId?: string; repeat?: Repeat; date?: string; amount?: number; note?: string } = {}) {
+export function openTxEditor(opts: { tx?: Tx; transfer?: Transfer; kind?: Mode; accountId?: string; categoryId?: string; repeat?: Repeat; date?: string; amount?: number; note?: string; onSaved?: (t: Tx) => void } = {}) {
   openOverlay((close) => <TxEditor {...opts} close={close} />);
 }
 
@@ -58,7 +58,7 @@ function ImageViewer({ att, blob, url }: { att: Attachment; blob: Blob; url: str
   );
 }
 
-function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: date0, amount: amount0, note: note0, close }: { tx?: Tx; transfer?: Transfer; kind?: Mode; accountId?: string; categoryId?: string; repeat?: Repeat; date?: string; amount?: number; note?: string; close: () => void }) {
+function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: date0, amount: amount0, note: note0, onSaved, close }: { tx?: Tx; transfer?: Transfer; kind?: Mode; accountId?: string; categoryId?: string; repeat?: Repeat; date?: string; amount?: number; note?: string; onSaved?: (t: Tx) => void; close: () => void }) {
   const s = useStore();
   const { t, locale } = useT();
   const accounts = accountsSorted(s.accounts).filter((a) => !a.archived || a.id === tx?.accountId || a.id === transfer?.from || a.id === transfer?.to);
@@ -190,6 +190,7 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
       };
       if (future && done) nt.done = true;
       if (atts.length) nt.attachments = atts;
+      if (onSaved) { onSaved(nt); toast(t('savedOk')); close(); return; }
       if (rep) { nt.repeat = rep; nt.series = tx?.series ?? uid(); if (remind >= 0) nt.remind = remind; }
       else if (tx?.series) nt.series = tx.series;
       for (const old of tx?.attachments ?? []) if (!atts.some((a) => a.id === old.id)) deleteFile(old.id);

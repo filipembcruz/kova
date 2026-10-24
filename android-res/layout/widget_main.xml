@@ -66,6 +66,15 @@
         android:textColor="#F2FFFFFF"
         android:textSize="11sp" />
 
+    <ImageView
+        android:id="@+id/w_chart"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="6dp"
+        android:layout_weight="1"
+        android:scaleType="fitXY"
+        android:visibility="gone" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
