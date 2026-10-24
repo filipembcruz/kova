@@ -100,7 +100,7 @@ public final class NotifEngine {
         // same notification posted again / updated → ignore
         String hash = Integer.toHexString((pkg + "|" + title + "|" + text).hashCode());
         JSONArray hashes = arr(p, "hashes");
-        for (int i = 0; i < hashes.length(); i++) if (hash.equals(hashes.optString(i))) { log(c, pkg, label, text, when, "repeat"); return; }
+        for (int i = 0; i < hashes.length(); i++) if (hash.equals(hashes.optString(i))) return;
         hashes.put(hash);
         while (hashes.length() > 300) hashes.remove(0);
         p.edit().putString("hashes", hashes.toString()).apply();
@@ -196,6 +196,10 @@ public final class NotifEngine {
     static synchronized void log(Context c, String pkg, String label, String text, long when, String result) {
         SharedPreferences p = prefs(c);
         JSONArray l = arr(p, "log");
+        for (int i = 0; i < l.length(); i++) { // same notification seen again (e.g. re-scan of the shade)
+            JSONObject o = l.optJSONObject(i);
+            if (o != null && pkg.equals(o.optString("pkg")) && o.optLong("ts") == when && result.equals(o.optString("result"))) return;
+        }
         try {
             String t = text == null ? "" : text;
             l.put(new JSONObject().put("pkg", pkg).put("app", label).put("ts", when).put("text", t.length() > 140 ? t.substring(0, 140) : t).put("result", result));
@@ -231,6 +235,7 @@ public final class NotifEngine {
 
     /** Re-read the last notifications of an app that was just turned on. */
     static void reprocess(Context c, String pkg) {
+        KovaNotificationListener.scanActive(pkg.isEmpty() ? null : pkg); // still in the notification shade
         JSONObject s = obj(prefs(c), "seen");
         JSONObject e = s.optJSONObject(pkg);
         if (e == null) return;
