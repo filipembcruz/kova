@@ -6,7 +6,7 @@ import { useT } from '../i18n';
 import { addDays, byCategory, filterTx, parseIso, Period, periodOf, shiftPeriod, sum, today, toBase, pad } from '../lib/calc';
 import { money, shortDate } from '../lib/format';
 import { Bubble, Empty, Sheet } from '../components/ui';
-import { Donut, PaceChart } from '../components/charts';
+import { Donut, PaceChart, CumChart } from '../components/charts';
 import { PeriodControl } from '../components/Pickers';
 import { navigate, openOverlay, toast, setAddKind, getAddKind } from '../lib/nav';
 import { openTxEditor } from '../components/TxEditor';
@@ -26,6 +26,7 @@ export function Home() {
   useEffect(() => { setAddKind(kind); }, [kind]);
   const [period, setPeriod] = useState<Period>(() => periodOf('month', today(), s.settings.weekStart));
   const [sel, setSel] = useState<string | null>(null);
+  const [paceView, setPaceView] = useState<'cum' | 'daily'>('cum');
   const acc = s.accounts.find((a) => a.id === accId);
   const accOpt = accId || undefined;
 
@@ -78,7 +79,25 @@ export function Home() {
       prevTotal = sum(filterTx(s, { start: prevP.start, end: prevEnd }, kind, accOpt));
       if (period.gran === 'month') sameLabel = t('vsSameDay', { d: String(parseIso(prevEnd).getDate()), m: parseIso(prevP.start).toLocaleDateString(locale, { month: 'short' }).replace('.', '') });
     } else prevTotal = sum(filterTx(s, prevP, kind, accOpt));
-    return { buckets, avg, total: totalP, byMonth, projection: isCurrent ? Math.round(avg * buckets.length) : null, change: prevTotal ? ((cmpNow - prevTotal) / prevTotal) * 100 : null, sameLabel };
+    // running totals: this period (up to today) and the previous one, bucket by bucket
+    const prevTxs = filterTx(s, prevP, kind, accOpt);
+    const prevVals: number[] = [];
+    if (byMonth) {
+      const d0 = parseIso(prevP.start);
+      for (let m = new Date(d0.getFullYear(), d0.getMonth(), 1); m <= parseIso(prevP.end); m = new Date(m.getFullYear(), m.getMonth() + 1, 1)) {
+        const key = `${m.getFullYear()}-${pad(m.getMonth() + 1)}`;
+        prevVals.push(sum(prevTxs.filter((x) => x.date.startsWith(key))));
+      }
+    } else {
+      for (let d = prevP.start; d <= prevP.end; d = addDays(d, 1)) prevVals.push(sum(prevTxs.filter((x) => x.date === d)));
+    }
+    let acc0 = 0;
+    const prevCum = prevVals.map((v) => (acc0 += v));
+    acc0 = 0;
+    const curCum = buckets.filter((b) => !isCurrent || b.key <= now.slice(0, b.key.length)).map((b) => (acc0 += b.value));
+    const prevName = byMonth ? String(parseIso(prevP.start).getFullYear()) : period.gran === 'month' ? parseIso(prevP.start).toLocaleDateString(locale, { month: 'short' }).replace('.', '') : t('previousPeriod');
+    const curName = byMonth ? String(parseIso(period.start).getFullYear()) : period.gran === 'month' ? parseIso(period.start).toLocaleDateString(locale, { month: 'short' }).replace('.', '') : t('thisPeriod');
+    return { buckets, avg, total: totalP, byMonth, projection: isCurrent ? Math.round(avg * buckets.length) : null, change: prevTotal ? ((cmpNow - prevTotal) / prevTotal) * 100 : null, sameLabel, curCum, prevCum, curName, prevName };
   }, [s.txs, period, kind, accId, locale]);
 
   const bills = useMemo(() => upcomingBills(s).filter((x) => !accId || x.accountId === accId).slice(0, 4), [s.txs, accId]);
@@ -199,8 +218,17 @@ export function Home() {
               </span>
             )}
           </h3>
-          <PaceChart data={pace.buckets} avg={pace.avg} color={kind === 'expense' ? '#EF4444' : '#10A36A'} fmt={(v) => money(v, base, locale)} />
-          <div className="small muted" style={{ margin: '4px 6px 0' }}>{t('tapBar')}</div>
+          <div className="seg-mini">
+            <button className={paceView === 'cum' ? 'on' : ''} onClick={() => setPaceView('cum')}>{t('cumulative')}</button>
+            <button className={paceView === 'daily' ? 'on' : ''} onClick={() => setPaceView('daily')}>{pace.byMonth ? t('monthlyBars') : t('daily')}</button>
+          </div>
+          {paceView === 'cum' ? (
+            <CumChart key={period.gran + period.start + kind} cur={pace.curCum} prev={pace.prevCum} labels={pace.buckets.map((b) => b.label)} fulls={pace.buckets.map((b) => b.full ?? b.label)} curName={pace.curName} prevName={pace.prevName}
+              color={kind === 'expense' ? '#EF4444' : '#10A36A'} fmt={(v) => money(v, base, locale)} />
+          ) : (
+            <PaceChart data={pace.buckets} avg={pace.avg} color={kind === 'expense' ? '#EF4444' : '#10A36A'} fmt={(v) => money(v, base, locale)} />
+          )}
+          <div className="small muted" style={{ margin: '4px 6px 0' }}>{paceView === 'cum' ? t('tapLine') : t('tapBar')}</div>
           <div className="stats" style={{ marginTop: 6 }}>
             <div className="st"><span>{pace.byMonth ? t('monthlyAvg') : t('dailyAvg')}</span><b>{money(Math.round(pace.avg), base, locale)}</b></div>
             {pace.projection !== null && <div className="st"><span>{t('projected')}</span><b style={{ color: 'var(--brand)' }}>{money(pace.projection, base, locale)}</b></div>}

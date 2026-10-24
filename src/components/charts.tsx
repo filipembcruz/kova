@@ -220,3 +220,57 @@ export function PaceChart({ data, avg, fmt, color }: { data: { label: string; va
     </svg>
   );
 }
+
+/** Running total of this period (solid, filled) against the previous one (dashed). Tap to read a day. */
+export function CumChart({ cur, prev, labels, fulls, curName, prevName, color, fmt }: { cur: number[]; prev: number[]; labels: string[]; fulls: string[]; curName: string; prevName: string; color: string; fmt: (v: number) => string }) {
+  const n = Math.max(labels.length, prev.length, 2);
+  const [sel, setSel] = useState<number | null>(null);
+  const W = 340, H = 200, top = 50, bottom = 22, left = 4, right = 8;
+  const plotH = H - top - bottom, plotW = W - left - right;
+  const max = Math.max(1, ...cur, ...prev);
+  const x = (i: number) => left + (plotW * i) / (n - 1);
+  const y = (v: number) => top + plotH - (v / max) * plotH;
+  const line = (arr: number[]) => arr.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const last = cur.length - 1;
+  const i = Math.min(sel ?? last, n - 1);
+  const every = labels.length > 16 ? Math.ceil(labels.length / 8) : 1;
+  const pick = (e: { clientX: number; currentTarget: SVGSVGElement }) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const k = Math.round((((e.clientX - r.left) / r.width) * W - left) / plotW * (n - 1));
+    setSel(Math.max(0, Math.min(Math.max(last, prev.length - 1), k)));
+  };
+  const cv = cur[Math.min(i, last)] ?? null, pv = prev[Math.min(i, prev.length - 1)] ?? null;
+  const tip = `${fulls[i] ?? labels[i] ?? ''} · ${curName} ${i <= last && cv !== null ? fmt(cv) : '—'} · ${prevName} ${pv !== null ? fmt(pv) : '—'}`;
+  const tw = Math.min(W - 8, tip.length * 5.9 + 16);
+  const tx = Math.max(4, Math.min(W - tw - 4, x(i) - tw / 2));
+  return (
+    <svg className="chart" viewBox={`0 0 ${W} ${H}`} onClick={pick} style={{ cursor: 'pointer' }}>
+      <g fontSize="10.5" fill="var(--muted)">
+        <line x1={left} x2={left + 16} y1={10} y2={10} stroke={color} strokeWidth="3" strokeLinecap="round" />
+        <text x={left + 22} y={14}>{curName}</text>
+        <line x1={left + 34 + curName.length * 6} x2={left + 50 + curName.length * 6} y1={10} y2={10} stroke="var(--muted)" strokeWidth="2" strokeDasharray="4 3" />
+        <text x={left + 56 + curName.length * 6} y={14}>{prevName}</text>
+      </g>
+      <line x1={0} x2={W} y1={top + plotH} y2={top + plotH} stroke="var(--line)" />
+      <line x1={0} x2={W} y1={top + plotH / 2} y2={top + plotH / 2} stroke="var(--line)" strokeDasharray="2 4" />
+      {prev.length > 1 && <path d={line(prev)} fill="none" stroke="var(--muted)" strokeWidth="2" strokeDasharray="5 4" opacity=".75" />}
+      {cur.length > 0 && (
+        <>
+          <path d={`${line(cur)} L${x(last).toFixed(1)},${top + plotH} L${x(0)},${top + plotH} Z`} fill={color} opacity=".12" />
+          <path d={line(cur)} fill="none" stroke={color} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+          <circle cx={x(last)} cy={y(cur[last])} r="4.5" fill={color} />
+        </>
+      )}
+      <line x1={x(i)} x2={x(i)} y1={top - 4} y2={top + plotH} stroke="var(--ink)" opacity=".18" />
+      {i <= last && cv !== null && <circle cx={x(i)} cy={y(cv)} r="4" fill="var(--paper)" stroke={color} strokeWidth="2.5" />}
+      {pv !== null && i < prev.length && <circle cx={x(i)} cy={y(pv)} r="3.5" fill="var(--paper)" stroke="var(--muted)" strokeWidth="2" />}
+      <g>
+        <rect x={tx} y={22} width={tw} height={20} rx={10} fill="var(--paper)" stroke="var(--line)" />
+        <text x={tx + tw / 2} y={36} textAnchor="middle" fontSize="10.5" fontWeight="700" fill="var(--ink)">{tip}</text>
+      </g>
+      {labels.map((l, k) => (k === last || every === 1 || (k % every === 0 && Math.abs(k - last) >= Math.max(2, Math.ceil(every / 2) + 1))) && (
+        <text key={k} x={x(k)} y={H - 5} textAnchor="middle" fontSize="10.5" fill={k === last ? 'var(--ink)' : 'var(--muted)'} fontWeight={k === last ? 700 : 500}>{l}</text>
+      ))}
+    </svg>
+  );
+}

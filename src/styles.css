@@ -441,3 +441,7 @@ input, textarea { user-select: text; }
 .pend-act button.ok { background: var(--brand); color: #fff; }
 .pend-act button svg { width: 18px; height: 18px; }
 .napp + .napp { border-top: 1px solid var(--line, rgba(0,0,0,.06)); }
+
+.seg-mini { display: inline-flex; gap: 2px; background: var(--sunk); padding: 3px; border-radius: 12px; margin: 2px 0 6px; }
+.seg-mini button { padding: 6px 12px; border-radius: 9px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.seg-mini button.on { background: var(--paper); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
