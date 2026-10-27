@@ -13,7 +13,11 @@ import { notifStatus, openNotifAccess, openBattery, notifSeen, parseTest, notifi
 import { updateRates } from '../screens/Settings';
 
 /** Opens the editor pre-filled with a detected transaction; saving confirms it (and teaches Kova). */
+let editingId = '';
 export function editNotif(it: NotifItem) {
+  if (editingId === it.id) return; // already open (e.g. the same tap delivered twice)
+  editingId = it.id;
+  setTimeout(() => { if (editingId === it.id) editingId = ''; }, 4000);
   openTxEditor({
     kind: it.kind, accountId: it.acc, categoryId: it.cat, amount: it.amt, note: it.note || it.merchant, date: it.date,
     onSaved: (tx) => { const { id: _id, created: _c, ...rest } = tx; confirmNotif(it, rest); },

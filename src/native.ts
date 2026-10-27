@@ -348,10 +348,23 @@ export function updateWidget(data: string) {
   if (!isNative()) return;
   SystemColor.setWidget({ data }).catch(() => {});
 }
+// On a cold start Android hands the same link both as "appUrlOpen" and as the launch URL:
+// handle each link once (same URL within a few seconds = the same tap).
+let linksReady = false;
+const recentLinks = new Map<string, number>();
 export function initDeepLinks(handler: (url: string) => void) {
-  if (!isNative()) return;
-  CapApp.addListener('appUrlOpen', (e: { url: string }) => handler(e.url));
-  CapApp.getLaunchUrl().then((r: { url?: string } | undefined) => { if (r?.url) handler(r.url); }).catch(() => {});
+  if (!isNative() || linksReady) return;
+  linksReady = true;
+  const once = (url?: string) => {
+    if (!url) return;
+    const now = Date.now();
+    for (const [u, t] of recentLinks) if (now - t > 5000) recentLinks.delete(u);
+    if (recentLinks.has(url)) return;
+    recentLinks.set(url, now);
+    handler(url);
+  };
+  CapApp.addListener('appUrlOpen', (e: { url: string }) => once(e.url));
+  CapApp.getLaunchUrl().then((r: { url?: string } | undefined) => once(r?.url)).catch(() => {});
 }
 
 // ---------- bank notifications ----------
