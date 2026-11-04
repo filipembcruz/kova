@@ -13,25 +13,30 @@
 
 ## ✨ Features
 
-- **Home** — account picker, balance (with a privacy switch), expenses/income by category for any day, week, month, year or custom period, and upcoming planned entries.
-- **Insights** — monthly, quarterly and yearly reports: how much you saved, where the money went, biggest expenses, non-essential spending, fixed costs & subscriptions detected automatically, categories above their usual level, budget alerts, net-worth change and month-end projection.
-- **Planned & recurring entries** — add income or expenses with a future date (they only hit the balance on that day), confirm them early with one tap, repeat weekly/monthly/yearly.
-- **Accounts** — unlimited accounts in any currency (BRL, EUR, USD…), balance distribution, transfers between accounts (including cross-currency), archive and reorder.
-- **Charts** — income vs expenses vs savings by month/year, category donut, per-category trends, comparison with the previous period. Day / week / month / year / custom period.
-- **Categories** — 180+ modern icons (Phosphor), 24 colors, optional monthly budgets with progress rings.
-- **Settings** — language (auto / English / Português), light/dark/system theme, hide balances, main currency, exchange rates (manual or online update), backups.
-- **Fast entry** — built-in calculator keypad, tags, notes, today/yesterday shortcuts.
-- **Fixed bills & reminders** — recurring bills with phone notifications before the due date; fixed costs are detected from your history.
-- **Attachments** — add photos or PDFs (receipts, invoices) to any transaction.
-- **Drag to reorder** categories and accounts; rename or delete tags.
-- **Search** — accent-insensitive search across notes, categories, accounts, tags and amounts, with multi-category filters and sorting by amount.
-- **Automatic backup** — a daily copy kept on the phone and included in Android's backup to Google Drive; one tap to send a backup file to Drive.
-- **Your data stays on your phone.** No account, no ads, no tracking.
-- **Import** — bring your history from a `.mmbackup` file exported by another finance app. Export/restore Kova backups (`.json`) and export CSV.
+- **Home** — account picker, balance (with a privacy switch), quick-launch shortcuts, expenses/income by category for any day, week, month, year or custom period.
+- **Spending pace** — running total of this period against the previous one, compared fairly up to the same day ("+54% vs 1–24 Sep"), plus daily/monthly bars and a month-end projection.
+- **Automatic entries from bank notifications** — Kova reads purchase, Pix and transfer notifications from the bank apps you choose (N26, Nubank, Revolut, Inter, Wise…): amount, currency and merchant. It shows its own notification with **Confirm / Edit / Not a transaction**, learns your categories per place, skips promotions and duplicates, pairs money moving between your own accounts as a transfer, and adds by itself once it is sure. Everything stays on the phone.
+- **Home-screen widgets** — month-to-date spending with the same-day comparison, top categories, a running-total chart and *+ Expense* / shortcut buttons (4×2 and a 2×1 mini).
+- **Insights** — monthly, quarterly and yearly reports: how much you saved, where the money went, biggest expenses, non-essential spending, fixed costs detected automatically, budget alerts, net-worth change — each with “see how it was calculated”.
+- **Fast entry** — calculator keypad, shortcuts (⚡ to save any entry as one), note autocomplete, tags, today/yesterday/any date, attachments (photos or PDFs).
+- **Planned, recurring & fixed bills** — future-dated entries, weekly/monthly/yearly repeats and reminders before each due date.
+- **Accounts & currencies** — unlimited accounts in any currency, transfers (including cross-currency), drag to reorder, archive.
+- **Categories** — 180+ icons (Phosphor), colors, monthly budgets, drag to reorder.
+- **Privacy & safety** — PIN lock with fingerprint, hide balances, automatic backup after every change (one file per month, last 12 kept, on the phone and in *Documents/Kova*), restore offered on a fresh install, share a backup to Drive/e-mail in one tap.
+- **Your data stays on your phone.** No account, no ads, no tracking. English & Português, light & dark.
+- **Import** — bring your history from a `.mmbackup` file exported by another finance app; export/restore Kova backups (`.json`) and export CSV.
 
-| Home | Dark mode |
-|---|---|
-| <img src="docs/home.jpg" width="300"/> | <img src="docs/home-dark.jpg" width="300"/> |
+## 📸 Screenshots
+
+| Home | Spending pace | To confirm (from bank notifications) |
+|---|---|---|
+| <img src="docs/home.jpg" width="260"/> | <img src="docs/pace.jpg" width="260"/> | <img src="docs/confirm.jpg" width="260"/> |
+| **New transaction** | **Insights** | **Automatic entries** |
+| <img src="docs/add.jpg" width="260"/> | <img src="docs/reports.jpg" width="260"/> | <img src="docs/auto-entries.jpg" width="260"/> |
+| **Accounts** | **Categories** | **Dark mode** |
+| <img src="docs/accounts.jpg" width="260"/> | <img src="docs/categories.jpg" width="260"/> | <img src="docs/home-dark.jpg" width="260"/> |
+
+<sub>Screenshots use demo data.</sub>
 
 ## 📲 Install
 
@@ -62,7 +67,7 @@ For convenience the repository ships a **public** keystore (`keystore/kova-relea
 
 ## 🧱 Tech
 
-React 19 + TypeScript, bundled with esbuild, packaged with Capacitor 7. Charts are hand-made SVG; icons from [Phosphor](https://phosphoricons.com) via react-icons; fonts TeX Gyre Adventor (GUST) and Inter (OFL). A tiny native plugin (`android-src/`) colours the system bars. Backups are parsed by a tiny built-in SQLite reader — no native code.
+React 19 + TypeScript, bundled with esbuild, packaged with Capacitor 7. Charts are hand-made SVG; icons from [Phosphor](https://phosphoricons.com) via react-icons; fonts Inter and Inter Display (OFL). Native code lives in `android-src/` (Java): edge-to-edge system bars, home-screen widgets, the notification reader (`TxParser` — unit-testable pure Java) and fingerprint unlock. `.mmbackup` files are parsed by a tiny built-in SQLite reader.
 
 ```
 src/
