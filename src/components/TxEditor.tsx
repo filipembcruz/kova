@@ -397,7 +397,8 @@ function TxEditor({ tx, transfer, kind, accountId, categoryId, repeat, date: dat
           <input value={note} placeholder={t('notePh')} type="text" inputMode="text" autoCapitalize="sentences" autoComplete="off" enterKeyHint="done"
             onFocus={() => setNoteFocus(true)} onBlur={() => setTimeout(() => setNoteFocus(false), 150)}
             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-            onChange={(e) => setNote(e.target.value)} />
+            onChange={(e) => setNote(e.target.value)} style={{ paddingRight: 34 }} />
+          {note && <button type="button" className="clear-x" onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.preventDefault(); setNote(''); }} aria-label={t('clear')}><PiXBold /></button>}
           {noteSuggestions.length > 0 && (
             <div className="note-sugg">
               {noteSuggestions.map((n) => (

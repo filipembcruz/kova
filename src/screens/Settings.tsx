@@ -144,7 +144,7 @@ export function Settings() {
       rows.push([tx.date, tx.kind, esc(cat.get(tx.categoryId) ?? ''), esc(a?.name ?? ''), (tx.amount / 100).toFixed(2), a?.currency ?? '', (tx.base / 100).toFixed(2), esc(tx.note), esc(tx.tags.join(' '))].join(','));
     }
     for (const tr of x.transfers) {
-      rows.push([tr.date, 'transfer', '', esc(`${acc.get(tr.from)?.name} -> ${acc.get(tr.to)?.name}`), (tr.fromAmount / 100).toFixed(2), acc.get(tr.from)?.currency ?? '', '', esc(tr.note), ''].join(','));
+      rows.push([tr.date, 'transfer', '', esc(`${acc.get(tr.from)?.name ?? t('manualAdjust')} -> ${acc.get(tr.to)?.name ?? t('manualAdjust')}`), (tr.fromAmount / 100).toFixed(2), acc.get(tr.from)?.currency ?? '', '', esc(tr.note), ''].join(','));
     }
     await saveTextFile(`kova-${today()}.csv`, '﻿' + rows.join('\n'), 'text/csv', t('exportCsv'));
   };

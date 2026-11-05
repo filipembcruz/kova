@@ -13,6 +13,9 @@ export function balances(s: State, upTo = today()): Map<string, number> {
   return m;
 }
 
+/** Pseudo-account on the other side of a manual balance adjustment (kept as a transfer, so it shows in the history). */
+export const ADJ = '__adjust__';
+
 export function rate(s: State, cur: string) {
   if (cur === s.settings.baseCurrency) return 1;
   return s.settings.rates[cur] ?? 1;

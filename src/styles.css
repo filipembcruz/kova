@@ -448,3 +448,9 @@ input, textarea { user-select: text; }
 
 .logrow { padding: 12px 14px; display: grid; gap: 2px; }
 .logrow + .logrow { border-top: 1px solid var(--line, rgba(0,0,0,.06)); }
+
+.clear-x { position: absolute; right: 10px; top: 24px; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--sunk); color: var(--muted); }
+.clear-x svg { width: 14px; height: 14px; }
+.field { position: relative; }
+.adj-badge { position: absolute; right: -4px; bottom: -4px; width: 22px; height: 22px; border-radius: 50%; background: var(--paper); color: var(--ink2); display: grid; place-items: center; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+.adj-badge svg { width: 13px; height: 13px; }

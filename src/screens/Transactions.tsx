@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { PiArrowLeftBold, PiMagnifyingGlassBold, PiArrowRightBold, PiXBold, PiSlidersHorizontalBold, PiCheckBold, PiArrowsClockwiseBold, PiPaperclipBold, PiListBulletsBold, PiChartPieSliceBold, PiPencilSimpleBold } from 'react-icons/pi';
+import { PiArrowLeftBold, PiMagnifyingGlassBold, PiArrowRightBold, PiXBold, PiSlidersHorizontalBold, PiCheckBold, PiArrowsClockwiseBold, PiPaperclipBold, PiListBulletsBold, PiChartPieSliceBold, PiPencilSimpleBold, PiTrashBold } from 'react-icons/pi';
 import type { Kind, Tx, Transfer } from '../lib/types';
-import { useStore } from '../lib/store';
+import { useStore, setState } from '../lib/store';
 import { useT } from '../i18n';
-import { Gran, Period, periodOf, today, inPeriod, fold, isPlanned } from '../lib/calc';
+import { Gran, Period, periodOf, today, inPeriod, fold, isPlanned, ADJ, parseIso } from '../lib/calc';
 import { dayLabel, money, shortDate } from '../lib/format';
-import { Bubble, Seg, Empty, Sheet } from '../components/ui';
+import { Bubble, Seg, Empty, Sheet, confirmDialog } from '../components/ui';
 import { Donut } from '../components/charts';
 import { PeriodControl, periodText } from '../components/Pickers';
-import { navigate, openOverlay, useRoute, setAddKind } from '../lib/nav';
+import { navigate, openOverlay, useRoute, setAddKind, toast } from '../lib/nav';
 import { openTxEditor } from '../components/TxEditor';
 import { openAccountEditor } from '../components/Editors';
 
@@ -56,6 +56,25 @@ export function TransferRow({ tr }: { tr: Transfer }) {
   const from = s.accounts.find((a) => a.id === tr.from);
   const to = s.accounts.find((a) => a.id === tr.to);
   const planned = tr.date > today();
+  if (tr.from === ADJ || tr.to === ADJ) {
+    const a = tr.from === ADJ ? to : from;
+    const up = tr.from === ADJ;
+    return (
+      <button className="item" onClick={() => openOverlay((close) => <AdjustSheet tr={tr} close={close} />)}>
+        <div style={{ position: 'relative', width: 44, height: 44, flex: 'none' }}>
+          <Bubble icon={a?.icon ?? 'wallet'} color={a?.color ?? '#999'} size={44} />
+          <span className="adj-badge"><PiSlidersHorizontalBold /></span>
+        </div>
+        <div className="grow">
+          <div className="t">{t('manualAdjust')} · {a?.name}</div>
+          <div className="s">{tr.note && tr.note !== t('manualAdjust') ? tr.note + ' · ' : ''}{shortDate(tr.date, locale)}</div>
+        </div>
+        <div className="right">
+          <div className="amt" style={{ color: up ? 'var(--inc)' : 'var(--exp)' }}>{up ? '+' : '−'}{money(tr.fromAmount, a?.currency ?? s.settings.baseCurrency, locale)}</div>
+        </div>
+      </button>
+    );
+  }
   return (
     <button className={'item' + (planned ? ' planned' : '')} onClick={() => openTxEditor({ transfer: tr })}>
       <RoutePair fromId={tr.from} toId={tr.to} />
@@ -71,10 +90,36 @@ export function TransferRow({ tr }: { tr: Transfer }) {
   );
 }
 
+function AdjustSheet({ tr, close }: { tr: Transfer; close: () => void }) {
+  const s = useStore();
+  const { t, locale } = useT();
+  const up = tr.from === ADJ;
+  const a = s.accounts.find((x) => x.id === (up ? tr.to : tr.from));
+  const undo = async () => {
+    if (!(await confirmDialog(t('undoAdjustQ'), t('undoAdjust'), t('cancel')))) return;
+    setState((st) => ({ ...st, transfers: st.transfers.filter((x) => x.id !== tr.id) }));
+    toast(t('deleted'));
+    close();
+  };
+  return (
+    <Sheet title={t('manualAdjust')} footer={<button className="btn danger" onClick={undo}><PiTrashBold /> {t('undoAdjust')}</button>}>
+      <div className="sheet-b">
+        <div className="paper">
+          <div className="row"><span className="grow muted">{t('account')}</span><b>{a?.name ?? '—'}</b></div>
+          <div className="row" style={{ marginTop: 10 }}><span className="grow muted">{t('date')}</span><b>{parseIso(tr.date).toLocaleDateString(locale, { dateStyle: 'long' })}</b></div>
+          <div className="row" style={{ marginTop: 10 }}><span className="grow muted">{t('amount')}</span><b style={{ color: up ? 'var(--inc)' : 'var(--exp)' }}>{up ? '+' : '−'}{money(tr.fromAmount, a?.currency ?? s.settings.baseCurrency, locale)}</b></div>
+        </div>
+        <div className="small muted" style={{ margin: '0 6px' }}>{t('undoAdjustD')}</div>
+      </div>
+    </Sheet>
+  );
+}
+
 function RoutePair({ fromId, toId }: { fromId: string; toId: string }) {
   const s = useStore();
-  const from = s.accounts.find((a) => a.id === fromId);
-  const to = s.accounts.find((a) => a.id === toId);
+  const adj = { icon: 'scales', color: '#8b86a0' } as const;
+  const from = fromId === ADJ ? adj : s.accounts.find((a) => a.id === fromId);
+  const to = toId === ADJ ? adj : s.accounts.find((a) => a.id === toId);
   return (
     <div style={{ position: 'relative', width: 44, height: 44, flex: 'none' }}>
       <div style={{ position: 'absolute', left: 0, top: 0 }}><Bubble icon={from?.icon ?? 'wallet'} color={from?.color ?? '#999'} size={30} /></div>
@@ -87,24 +132,61 @@ type KindF = 'expense' | 'income' | 'transfer' | 'all';
 type Sort = 'date' | 'desc' | 'asc';
 type View = 'list' | 'group';
 
-function CategoryFilter({ initial, onApply }: { initial: string[]; onApply: (ids: string[]) => void }) {
+function FilterSheet({ cats: cats0, accs: accs0, note: note0, showCats, onApply }: { cats: string[]; accs: string[]; note: string; showCats: boolean; onApply: (f: { cats: string[]; accs: string[]; note: string }) => void }) {
   const s = useStore();
   const { t } = useT();
-  const [sel, setSel] = useState<string[]>(initial);
+  const [sel, setSel] = useState<string[]>(cats0);
+  const [accs, setAccs] = useState<string[]>(accs0);
+  const [note, setNote] = useState(note0);
+  const [focusNote, setFocusNote] = useState(false);
   const [q, setQ] = useState('');
   const cats = s.categories.filter((c) => !q || fold(c.name).includes(fold(q))).sort((a, b) => (a.kind === b.kind ? a.order - b.order : a.kind === 'expense' ? -1 : 1));
   const toggle = (id: string) => setSel(sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]);
+  const toggleAcc = (id: string) => setAccs(accs.includes(id) ? accs.filter((x) => x !== id) : [...accs, id]);
+  const noteSugg = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const x of s.txs) if (x.note.trim()) m.set(x.note.trim(), (m.get(x.note.trim()) ?? 0) + 1);
+    for (const x of s.transfers) if (x.note.trim()) m.set(x.note.trim(), (m.get(x.note.trim()) ?? 0) + 1);
+    const f = fold(note.trim());
+    return [...m.entries()].filter(([n]) => (!f || fold(n).includes(f)) && n !== note.trim())
+      .sort((a, b) => Number(fold(b[0]).startsWith(f)) - Number(fold(a[0]).startsWith(f)) || b[1] - a[1]).slice(0, 10).map((e) => e[0]);
+  }, [s.txs, s.transfers, note]);
+  const accounts = s.accounts.filter((a) => !a.archived || accs.includes(a.id)).sort((a, b) => a.order - b.order);
   return (
     <Sheet
-      title={t('categories')}
+      title={t('filters')}
+      full
       footer={
         <>
-          <button className="btn ghost" onClick={() => setSel([])}>{t('clear')}</button>
-          <button className="btn primary" onClick={() => onApply(sel)}>{t('apply')}</button>
+          <button className="btn ghost" onClick={() => { setSel([]); setAccs([]); setNote(''); }}>{t('clear')}</button>
+          <button className="btn primary" onClick={() => onApply({ cats: showCats ? sel : [], accs, note: note.trim() })}>{t('apply')}</button>
         </>
       }
     >
       <div className="sheet-b">
+        <div className="label" style={{ marginTop: 0 }}>{t('noteContains')}</div>
+        <div className="field" style={{ position: 'relative' }}>
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('noteContainsPh')} type="text" autoComplete="off" enterKeyHint="done"
+            onFocus={() => setFocusNote(true)} onBlur={() => setTimeout(() => setFocusNote(false), 150)} style={{ paddingRight: 34 }} />
+          {note && <button className="clear-x" onMouseDown={(e) => e.preventDefault()} onClick={() => setNote('')} aria-label={t('clear')}><PiXBold /></button>}
+          {(focusNote || note) && noteSugg.length > 0 && (
+            <div className="note-sugg">
+              {noteSugg.map((n) => <button key={n} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => setNote(n)}>{n}</button>)}
+            </div>
+          )}
+        </div>
+
+        <div className="label">{t('accounts')}</div>
+        <div className="pills" style={{ flexWrap: 'wrap' }}>
+          {accounts.map((a) => (
+            <button key={a.id} className={'pill' + (accs.includes(a.id) ? ' on' : '')} onClick={() => toggleAcc(a.id)}>
+              <Bubble icon={a.icon} color={a.color} size={24} /> {a.name}
+            </button>
+          ))}
+        </div>
+
+        {showCats && <>
+        <div className="label">{t('categories')}</div>
         <div className="search"><PiMagnifyingGlassBold /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('search')} /></div>
         <div className="paper flush">
           {cats.map((c) => (
@@ -116,6 +198,7 @@ function CategoryFilter({ initial, onApply }: { initial: string[]; onApply: (ids
             </button>
           ))}
         </div>
+        </>}
       </div>
     </Sheet>
   );
@@ -134,7 +217,10 @@ export function Transactions() {
   const q0 = r.query;
   const [kind, setKind] = useState<KindF>((q0.get('kind') as KindF) || 'all');
   useEffect(() => { if (kind !== 'all') setAddKind(kind); }, [kind]);
-  const [accId, setAccId] = useState(q0.get('acc') || '');
+  const [accIds, setAccIds] = useState<string[]>(q0.get('acc') ? [q0.get('acc')!] : []);
+  const accId = accIds.length === 1 ? accIds[0] : '';
+  const setAccId = (id: string) => setAccIds(id ? [id] : []);
+  const [noteQ, setNoteQ] = useState('');
   const [cats, setCats] = useState<string[]>(q0.get('cat') ? [q0.get('cat')!] : []);
   const [period, setPeriod] = useState<Period>(() => {
     const st = q0.get('start'), en = q0.get('end'), g = (q0.get('gran') as Gran) || 'month';
@@ -153,14 +239,18 @@ export function Transactions() {
     const catName = new Map(s.categories.map((c) => [c.id, c.name]));
     const accName = new Map(s.accounts.map((a) => [a.id, a.name]));
     const inP = (d: string) => allTime || inPeriod(d, period);
+    const accOk = (id: string) => !accIds.length || accIds.includes(id);
+    const nq = fold(noteQ.trim());
+    const noteOk = (n: string) => !nq || fold(n).includes(nq);
+    accName.set(ADJ, t('manualAdjust'));
     const txs = kind === 'transfer' ? [] : s.txs.filter((x) => {
-      if (!inP(x.date) || (kind !== 'all' && x.kind !== kind) || (accId && x.accountId !== accId) || (cats.length && !cats.includes(x.categoryId))) return false;
+      if (!inP(x.date) || (kind !== 'all' && x.kind !== kind) || !accOk(x.accountId) || (cats.length && !cats.includes(x.categoryId)) || !noteOk(x.note)) return false;
       if (!terms.length) return true;
       const h = haystack(x, catName.get(x.categoryId) ?? '', accName.get(x.accountId) ?? '');
       return terms.every((w) => h.includes(w));
     });
     const trs = (kind === 'transfer' || kind === 'all') && !cats.length ? s.transfers.filter((x) => {
-      if (!inP(x.date) || (accId && x.from !== accId && x.to !== accId)) return false;
+      if (!inP(x.date) || (accIds.length && !accOk(x.from) && !accOk(x.to)) || !noteOk(x.note)) return false;
       if (!terms.length) return true;
       const h = fold([x.note, accName.get(x.from), accName.get(x.to), (x.fromAmount / 100).toFixed(2).replace('.', ',')].join(' '));
       return terms.every((w) => h.includes(w));
@@ -198,10 +288,12 @@ export function Transactions() {
       groups = [...map.entries()];
     }
     return { groups, inc, exp, trTotal, count: items.length, expCats: groupBy('expense'), incCats: groupBy('income'), routes: routeArr };
-  }, [s.txs, s.transfers, s.categories, s.accounts, kind, accId, cats, period, q, allTime, sort]);
+  }, [s.txs, s.transfers, s.categories, s.accounts, kind, accIds, cats, period, q, allTime, sort, noteQ]);
 
   const net = data.inc - data.exp;
-  const filterLabel = cats.length === 1 ? s.categories.find((c) => c.id === cats[0])?.name ?? t('filters') : cats.length > 1 ? t('nCategories', { n: String(cats.length) }) : t('filters');
+  const nFilters = (cats.length ? 1 : 0) + (accIds.length > 1 ? 1 : 0) + (noteQ.trim() ? 1 : 0);
+  const filterLabel = nFilters === 0 ? t('filters') : nFilters === 1 && cats.length === 1 && !noteQ.trim() ? s.categories.find((c) => c.id === cats[0])?.name ?? t('filters')
+    : nFilters === 1 && noteQ.trim() ? `“${noteQ.trim()}”` : `${t('filters')} (${nFilters})`;
   const sortLabel = sort === 'date' ? t('sortDate') : sort === 'desc' ? t('sortHigh') : t('sortLow');
   const nextSort: Record<Sort, Sort> = { date: 'desc', desc: 'asc', asc: 'date' };
 
@@ -265,13 +357,11 @@ export function Transactions() {
           <PiChartPieSliceBold /> {kind === 'transfer' ? t('byRoute') : t('byCategory')}
         </button>
         <button className={'pill text' + (sort !== 'date' ? ' on' : '')} onClick={() => setSort(nextSort[sort])}>{sortLabel}</button>
-        {kind !== 'transfer' && (
-          <button className={'pill text' + (cats.length ? ' on' : '')} onClick={() => openOverlay((close) => <CategoryFilter initial={cats} onApply={(ids) => { setCats(ids); close(); }} />)}>
-            <PiSlidersHorizontalBold /> {filterLabel}
-          </button>
-        )}
+        <button className={'pill text' + (nFilters ? ' on' : '')} onClick={() => openOverlay((close) => <FilterSheet cats={cats} accs={accIds} note={noteQ} showCats={kind !== 'transfer'} onApply={(f) => { setCats(f.cats); setAccIds(f.accs); setNoteQ(f.note); close(); }} />)}>
+          <PiSlidersHorizontalBold /> {filterLabel}
+        </button>
         <button className={'pill text' + (allTime ? ' on' : '')} onClick={() => setAllTime(!allTime)}>{t('allTime')}</button>
-        <button className={'pill text' + (!accId ? ' on' : '')} onClick={() => setAccId('')}>{t('total')}</button>
+        <button className={'pill text' + (!accIds.length ? ' on' : '')} onClick={() => setAccIds([])}>{t('total')}</button>
         {s.accounts.filter((a) => !a.archived || a.id === accId).sort((a, b) => a.order - b.order).map((a) => (
           <button key={a.id} className={'pill' + (accId === a.id ? ' on' : '')} onClick={() => setAccId(a.id)}>
             <Bubble icon={a.icon} color={a.color} size={24} /> {a.name}
@@ -311,7 +401,7 @@ export function Transactions() {
                     <button key={g.from + g.to} className="item" onClick={() => { setAccId(g.from); setKind('transfer'); setView('list'); }}>
                       <RoutePair fromId={g.from} toId={g.to} />
                       <div className="grow">
-                        <div className="t row" style={{ gap: 6, flexWrap: 'wrap' }}>{f?.name} <PiArrowRightBold size={13} /> {to?.name}</div>
+                        <div className="t row" style={{ gap: 6, flexWrap: 'wrap' }}>{g.from === ADJ ? t('manualAdjust') : f?.name} <PiArrowRightBold size={13} /> {g.to === ADJ ? t('manualAdjust') : to?.name}</div>
                         <div className="s">{g.n} {g.n === 1 ? t('transfer').toLowerCase() : t('transfers').toLowerCase()}</div>
                       </div>
                       <div className="amt" style={{ color: 'var(--xfer)' }}>{money(g.v, g.cur, locale)}</div>

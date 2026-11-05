@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
 import { PiTrashBold, PiArchiveBold, PiMagnifyingGlassBold, PiCheckBold } from 'react-icons/pi';
-import type { Account, Category, Kind } from '../lib/types';
+import type { Account, Category, Kind, Transfer } from '../lib/types';
 import { setState, useStore } from '../lib/store';
 import { ICONS, ICON_GROUPS, PALETTE } from '../lib/icons';
 import { useT } from '../i18n';
 import { Bubble, Sheet, Switch, confirmDialog } from './ui';
 import { openOverlay, toast } from '../lib/nav';
-import { balances, uid } from '../lib/calc';
+import { balances, uid, ADJ, today } from '../lib/calc';
 import { CURRENCIES } from '../lib/defaults';
 import { isEssential } from '../lib/report';
 
@@ -138,10 +138,16 @@ function AccountEditor({ acc, close }: { acc?: Account; close: () => void }) {
     const a: Account = {
       id: acc?.id ?? uid(), name: name.trim(), icon, color, currency, includeInTotal: include,
       archived: acc?.archived ?? false, order: acc?.order ?? s.accounts.length,
-      initial: acc ? acc.initial + (target - current) : target,
+      initial: acc ? acc.initial : target,
       note: acc?.note,
     };
-    setState((st) => ({ ...st, accounts: acc ? st.accounts.map((x) => (x.id === a.id ? a : x)) : [...st.accounts, a] }));
+    const diff = acc ? target - current : 0;
+    const adj: Transfer[] = diff ? [{
+      id: uid(), from: diff > 0 ? ADJ : a.id, to: diff > 0 ? a.id : ADJ, fromAmount: Math.abs(diff), toAmount: Math.abs(diff),
+      date: today(), note: t('manualAdjust'), created: new Date().toISOString(),
+    }] : [];
+    setState((st) => ({ ...st, accounts: acc ? st.accounts.map((x) => (x.id === a.id ? a : x)) : [...st.accounts, a], transfers: [...adj, ...st.transfers] }));
+    if (diff) toast(t('adjustSaved'));
     toast(t('savedOk'));
     close();
   };
@@ -178,6 +184,7 @@ function AccountEditor({ acc, close }: { acc?: Account; close: () => void }) {
           <label className="field">
             <span>{acc ? t('adjustBalance') : t('initialBalance')}</span>
             <input inputMode="decimal" value={bal} placeholder="0,00" onChange={(e) => setBal(e.target.value)} />
+            {acc && <small className="muted" style={{ display: 'block', fontSize: 11.5, marginTop: 4 }}>{t('adjustHint')}</small>}
           </label>
           <label className="field">
             <span>{t('currency')}</span>
